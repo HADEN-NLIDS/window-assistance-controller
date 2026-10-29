@@ -1,0 +1,19 @@
+# 统一换行符，避免 Windows / Linux 协作时整文件 diff
+* text=auto eol=lf
+
+# C 源码与头文件
+*.c    text eol=lf
+*.h    text eol=lf
+
+# 构建脚本保持 Windows 换行
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# 文档
+*.md   text eol=lf
+
+# 二进制，不做换行转换
+*.png  binary
+*.ico  binary
+*.exe  binary
+*.lib  binary

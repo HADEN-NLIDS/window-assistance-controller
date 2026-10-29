@@ -1,0 +1,159 @@
+/*
+ * Window Assistance Controller - resource script
+ *
+ * ENCODING
+ *
+ *   Every byte here is ASCII, and it must stay that way: rc.exe reads the file
+ *   through the system ANSI code page, and a non-ASCII literal makes it
+ *   mis-track the quotes and report "undefined keyword" on a line far from the
+ *   real one. That failure was measured, not guessed - see TRAPS.md
+ *   pitfall 14. The Chinese language name that used to live here now comes
+ *   from src/ui/i18n.c, which cl.exe compiles with /utf-8.
+ *
+ *   The #pragma below still declares UTF-8: it costs nothing, and it keeps the
+ *   file correct if someone later adds a non-ASCII string after checking that
+ *   the rule has changed.
+ *
+ * WHAT IS LEFT IN THIS FILE
+ *
+ *   One dialog: the close confirmation. It is the deliberate exception to
+ *   "pages, not windows" (docs/架构与数据结构.md section 1.4 rule 1) - it
+ *   interrupts a destructive action and has to be able to appear above
+ *   whatever page is showing.
+ *
+ *   The settings dialog used to live here too. Stage 4.5 turned settings into
+ *   a page, so its template was deleted rather than left behind: a template
+ *   nobody creates a dialog from is a second, silently outdated copy of the
+ *   layout.
+ *
+ *   Dialog captions and control labels are created blank and filled from
+ *   src/ui/i18n.c at run time, so one template serves both languages.
+ */
+
+#pragma code_page(65001)
+
+#include <winver.h>
+#include <windows.h>
+
+#include "resource.h"
+
+/* ---- manifest ------------------------------------------------
+ * The manifest is embedded via the linker (/MANIFEST:EMBED
+ * /MANIFESTINPUT:res\wac.manifest) rather than through the .rc,
+ * so that the same manifest is used by both build paths.
+ * Do NOT add an RT_MANIFEST resource here or it will conflict.
+ * ------------------------------------------------------------ */
+
+/* ---- application icon ---------------------------------------
+ * Uncomment once res\wac.ico exists.
+ *
+ * 1 ICON "wac.ico"
+ * ------------------------------------------------------------ */
+
+/* ---- close confirmation -------------------------------------
+ *
+ * Shown when the X button is pressed and the user has not yet decided what
+ * closing should mean. Replaces a MB_YESNOCANCEL message box.
+ *
+ * Why a real dialog: the message box asked "quit, or keep it running?" and
+ * offered Yes/No. Yes meant KEEP RUNNING and No meant QUIT - the reverse of
+ * what those words suggest for that question, so a user clicking the
+ * obvious-looking button got the other outcome. Radio buttons that name
+ * their own action remove the mapping step entirely, and match the layout
+ * the Settings dialog already uses for the same choice.
+ *
+ * "Do not ask again" is here rather than only in Settings because the moment
+ * the user is answering the question is the moment they know the answer.
+ *
+ * VERTICAL BUDGET - this was wrong once, so the arithmetic lives here.
+ *
+ * At 150% scaling with this dialog's text height, one vertical unit is about
+ * 2.9 px. The previous revision was 122 units tall (about 354 px) with the
+ * buttons at y=116 (about 336 px) and 15 units tall (about 44 px), putting
+ * their bottom edge at 380 px - 26 px BELOW the dialog. Only the top sliver
+ * of the buttons was visible, which is exactly what was reported.
+ *
+ * The rule now: work out where the bottom of the buttons lands in pixels,
+ * then make the dialog at least 10 units taller than that.
+ *
+ *     buttons  y = 130 .. 145   ->  about 377 .. 421 px
+ *     dialog   height = 155     ->  about 450 px   (29 px of slack)
+ *
+ * Horizontal budget follows the settings dialog: content ends at 252,
+ * dialog 264.
+ * ------------------------------------------------------------ */
+IDD_CLOSE_CONFIRM DIALOGEX 0, 0, 264, 155
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION ""
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    /* Icon and question sit close to the top: the previous revision left
+     * about 20 units of dead space above them. */
+    ICON            "", IDC_CLOSE_ICON,      14,   8, 32, 32
+    LTEXT           "", IDC_CLOSE_TEXT,      58,  12, 194, 26
+
+    /* Indented to line up with the question text, not with the icon, so the
+     * choices read as a continuation of the question. */
+    CONTROL         "", IDC_CLOSE_OPT_KEEP, "Button",
+                    BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 58,  50, 194, 13
+    CONTROL         "", IDC_CLOSE_OPT_QUIT, "Button",
+                    BS_AUTORADIOBUTTON, 58,  70, 194, 13
+
+    CONTROL         "", IDC_CLOSE_REMEMBER, "Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP, 58,  96, 194, 13
+
+    DEFPUSHBUTTON   "", IDOK,               132, 130, 58, 15
+    PUSHBUTTON      "", IDCANCEL,           196, 130, 58, 15
+END
+
+/* ---- rename --------------------------------------------------
+ *
+ * One field and two buttons. The captions are empty here and filled from
+ * src/ui/i18n.c at run time, like every other dialog in this file.
+ *
+ * WIDTH BUDGET: content ends at 228, dialog is 240. See the close-confirm
+ * note below for why this is written down.
+ * ------------------------------------------------------------ */
+IDD_RENAME_WS DIALOGEX 0, 0, 240, 78
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION ""
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "", IDC_RENAME_LABEL,  12,  12, 216, 10
+    EDITTEXT        IDC_RENAME_EDIT,       12,  26, 216, 14, ES_AUTOHSCROLL
+    DEFPUSHBUTTON   "", IDOK,             132,  52,  46, 15
+    PUSHBUTTON      "", IDCANCEL,         184,  52,  46, 15
+END
+
+/* ---- version information ------------------------------------
+ * ASCII only: see the encoding note at the top of this file.
+ * ------------------------------------------------------------ */
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     0,3,0,0
+PRODUCTVERSION  0,3,0,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"   /* US English, Unicode */
+        BEGIN
+            VALUE "CompanyName",      "Window Assistance Controller"
+            VALUE "FileDescription",  "Window workspace controller"
+            VALUE "FileVersion",      "0.3.0.0"
+            VALUE "InternalName",     "wac"
+            VALUE "OriginalFilename", "wac.exe"
+            VALUE "ProductName",      "Window Assistance Controller"
+            VALUE "ProductVersion",   "0.3.0.0"
+            VALUE "LegalCopyright",   "See LICENSE"
+            VALUE "Comments",         "Single-file window workspace controller. No network access, no administrator rights required."
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

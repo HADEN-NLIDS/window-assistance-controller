@@ -1,0 +1,48 @@
+# ---- build artifacts ----
+build/obj/
+build/*.exe
+build/*.pdb
+build/*.ilk
+build/*.exp
+build/*.lib
+build/*.res
+build/*.obj
+out/
+*.obj
+*.o
+*.i
+*.pdb
+*.ilk
+*.exp
+*.res
+*.exe
+*.dll
+*.sha256
+
+# ---- Visual Studio ----
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeUserPresets.json
+compile_commands.json
+
+# ---- local test output / logs ----
+tests/out/
+# t06_monitor snapshot files (machine-specific, regenerated per run)
+*.monitor-snapshot
+*.log
+
+# ---- internal docs (not published) ----
+docs/
+
+# ---- editor / OS ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*~
