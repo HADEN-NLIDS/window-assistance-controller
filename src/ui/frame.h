@@ -15,7 +15,7 @@
  *   Everything the system did for free now has to be done by hand: dragging,
  *   the eight resize edges, double-click to maximise, the system menu, and -
  *   the classic - keeping a maximised window from covering the taskbar.
- *   docs/架构与数据结构.md section 1.4 lists them; this file implements them.
+ *   This file implements them.
  *
  * WHAT THE WINDOW PROCEDURE MUST DO
  *

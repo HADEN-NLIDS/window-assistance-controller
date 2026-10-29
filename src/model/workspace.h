@@ -78,7 +78,7 @@ typedef enum {
 /*
  * One application in a workspace.
  *
- * REFERENCE SEMANTICS (docs/架构与数据结构.md section 2.6)
+ * REFERENCE SEMANTICS
  *
  *   A slot does not own its coordinates. It refers to a window preset
  *   ([rule:<id>]) and only carries the fields where THIS workspace differs
@@ -111,8 +111,8 @@ typedef struct {
      * one of its screens is unplugged and the answer has to survive that.
      *
      * ALL THREE LEVELS of the matching cascade are stored, because the
-     * measured behaviour (docs/手册.md section 8.10, six operations each run
-     * on real hardware) is that different operations break different levels:
+     * measured behaviour (six operations each run on real hardware) is that
+     * different operations break different levels:
      *
      *   mon_device    "\\.\DISPLAY6" - survives a physical unplug/replug, a
      *                 primary change, a resolution change and sleep/wake, but

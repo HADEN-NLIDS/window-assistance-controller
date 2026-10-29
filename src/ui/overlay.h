@@ -10,7 +10,7 @@
  *   wash, which is the whole point: the overlay is a coordinate system laid
  *   over reality, not a screenshot of it. Capturing the screen would cost a
  *   full-screen BitBlt plus a scale on every entry, against the memory and
- *   first-frame budgets in docs/安全设计.md.
+ *   first-frame budgets.
  *
  * WHY THIS ONE TAKES FOCUS WHEN t05's DID NOT
  *
@@ -58,7 +58,7 @@ extern "C" {
  * Why an edit session ended. The caller reports this, because "the overlay
  * disappeared" is not an acceptable thing to leave a user guessing about -
  * especially when the exit key is a four-key combination they may have hit by
- * accident (see docs/进度记录.md, 2026-09-22).
+ * accident.
  */
 typedef enum {
     OVERLAY_EXIT_NONE = 0,   /* still running */
@@ -246,8 +246,8 @@ typedef struct {
      *
      * NULL leaves the button greyed out, which is what it has been since edit
      * mode existed: `wac pick` never wrote the file, and for a long time nobody
-     * knew why (see docs/进度记录.md - a verb whitelist was missing the word,
-     * so the command never ran at all).
+     * knew why (a verb whitelist was missing the word, so the command never
+     * ran at all).
      */
     void (*pick)(void *ctx);
 } OverlaySlotSource;

@@ -3,7 +3,7 @@
  * overlay: what a point on it means, how far out it is, and which rows the
  * window can show.
  *
- * This is stage 8 task 2b (docs/手册.md section 8.23). The DATA it lists
+ * This is stage 8 task 2b. The DATA it lists
  * already exists (core/appindex.h).
  *
  * WHY THIS IS NOT A WINDOW, AND NOT PART OF overlay.c

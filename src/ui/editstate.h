@@ -8,7 +8,7 @@
  *   to be armed, an outcome that has to be reported exactly once, and - from
  *   stage 8 - an icon cache and thumbnail registrations as well.
  *
- *   docs/分段式编程计划.md calls this the most important design of stage 6:
+ *   This is the most important design of stage 6:
  *   EVERY resource that exists only while edit mode is active is released in
  *   release_edit_resources(), and nowhere else. The reason is the memory
  *   budget. A brush or an icon that survives one edit session is invisible; a

@@ -3,7 +3,7 @@
  *
  * Kept free of window handles on purpose: the rule that makes this project
  * testable is that anything with logic in it is separated from anything that
- * touches the OS. See docs/架构与数据结构.md section 1.1.
+ * touches the OS.
  */
 
 #include "nav.h"

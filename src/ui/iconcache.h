@@ -27,9 +27,8 @@
  *
  * WHAT READING AN ICON TOUCHES - the privacy statement names this
  *   Reading a program's icon opens that program's file, and the shell resolves
- *   file associations and its own icon cache to do it. That is recorded in
- *   docs/手册.md sections 7.4.4 and 7.4.5, which is where a new read has to be
- *   written down before it can be called expected.
+ *   file associations and its own icon cache to do it.
+ *   A new read has to be written down before it can be called expected.
  */
 
 #ifndef WAC_ICONCACHE_H

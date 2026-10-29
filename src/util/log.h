@@ -5,7 +5,7 @@
  * state is diagnosable after the fact, not as a general-purpose tracing
  * framework - an idle program must not pay for logging it never uses.
  *
- * PRIVACY RULES (see docs/安全设计.md section 4.6)
+ * PRIVACY RULES
  *
  *   Never write a full user path, and never write a window title. A window
  *   title routinely contains a document name, which turns a diagnostic file

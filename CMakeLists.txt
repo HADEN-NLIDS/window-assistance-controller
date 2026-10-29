@@ -3,7 +3,7 @@
 #  Generator: Visual Studio (x64) or Ninja with MSVC
 #
 #  Build:
-#     cmake -S . -B out -G "Visual Studio 18 2026" -A x64
+#     cmake -S . -B out -G "Visual Studio 17 2022" -A x64
 #     cmake --build out --config Release
 #
 #  NOTE: plain C project. Do NOT use a MinGW toolchain - it must be
@@ -81,14 +81,12 @@ add_compile_options(
 # ---- encoding + preprocessor ---------------------------------
 #  /utf-8            : sources and literals are UTF-8. Without it the Chinese
 #                      comments in src/ raise C4819, and /WX makes that fatal.
-#  /Zc:preprocessor  : conforming preprocessor. Needed for the variadic
-#                      logging macros; see docs/架构与数据结构.md pitfall B.
+#  /Zc:preprocessor  : conforming preprocessor, needed by the variadic
+#                      logging macros.
 add_compile_options(/utf-8 /Zc:preprocessor)
 
 # ---- sources -------------------------------------------------
-set(WAC_SOURCES
-    src/main.c
-)
+file(GLOB WAC_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 
 foreach(subdir core model ui util cli)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/${subdir}")
@@ -97,8 +95,7 @@ foreach(subdir core model ui util cli)
     endif()
 endforeach()
 
-# stage 1: no sources yet is not an error
-list(FILTER WAC_SOURCES EXCLUDE REGEX "\\.c$" )
+# Drop entries that do not exist. An empty source tree is not an error.
 set(WAC_REAL_SOURCES "")
 foreach(f ${WAC_SOURCES})
     if(EXISTS "${f}")
@@ -107,11 +104,20 @@ foreach(f ${WAC_SOURCES})
 endforeach()
 
 if(NOT WAC_REAL_SOURCES)
-    message(STATUS "No sources under src/ yet - nothing to build (expected until stage 2).")
+    message(STATUS "No sources under src/ yet - nothing to build.")
     return()
 endif()
 
 add_executable(wac WIN32 ${WAC_REAL_SOURCES})
+
+# Headers are included by bare name from sibling directories, so every
+# source root has to be on the search path.
+target_include_directories(wac PRIVATE
+    src
+    src/core
+    src/model
+    src/ui
+)
 
 # ---- resources ----------------------------------------------
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/res/wac.rc")

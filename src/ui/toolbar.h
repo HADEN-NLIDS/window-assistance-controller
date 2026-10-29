@@ -3,7 +3,7 @@
  *
  * WHY THIS IS NOT A CHILD WINDOW
  *
- *   docs/分段式编程计划.md specifies a WS_CHILD sub-window with its own
+ *   The plan specifies a WS_CHILD sub-window with its own
  *   WM_PAINT, about 200 lines. That does not work in this design. The overlay
  *   is a WS_EX_LAYERED window, and a layered window is composited as a single
  *   unit - child windows inside it are not drawn. A sub-window toolbar would
@@ -16,7 +16,7 @@
  *   sub-window, it cannot disagree with what is on screen, and the hit testing
  *   becomes testable with no window at all.
  *
- *   This is a deviation from the plan, recorded in docs/进度记录.md.
+ *   This is a deviation from the plan.
  *
  * WHAT THE LABELS ARE NOT HERE FOR
  *
@@ -143,7 +143,7 @@ int toolbar_button_width(ToolbarButton b);
 
 /*
  * The name box, and the two buttons that appear beside it while the user is
- * typing. This is the design recorded in docs/手册.md section 8.4: the name of
+ * typing. This is the design: the name of
  * the thing being edited is shown at the LEFT end of the strip, the action
  * buttons stay right-aligned, and the two ends meet in the middle.
  *

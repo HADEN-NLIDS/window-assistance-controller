@@ -6,7 +6,7 @@
  *
  *   The plan listed it as core/workspace_run.c next to proc_launch.c, but it
  *   depends on the WORKSPACE model (which slots, which presets) and on rule.h.
- *   core is the layer below the model (docs/架构与数据结构.md section 1.1), so
+ *   core is the layer below the model, so
  *   putting it there would point a dependency arrow the wrong way. It sits
  *   beside workspace.c instead, where "the thing that executes a workspace"
  *   can see what a workspace is.

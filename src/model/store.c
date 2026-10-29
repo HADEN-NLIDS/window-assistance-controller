@@ -604,7 +604,7 @@ StoreLoadResult store_load(const wchar_t *path, StoreDocument **out)
      * so the program seeded its defaults and - on the next save - WROTE OVER
      * the file. The three rotating backups were never consulted, and the user
      * was never told: exactly the silent loss the whole module exists to
-     * prevent (see the header, and trap 31 in docs/手册.md).
+     * prevent (see the header).
      *
      * Every file this program writes carries at least [meta] (version +
      * checksum), so "parsed, and empty" cannot be a file we wrote. It is junk,

@@ -11,8 +11,7 @@
  * WHAT IT READS - AND WHAT IT DELIBERATELY DOES NOT
  *
  *   Three sources, all of them already named in the privacy statement
- *   (docs/手册.md §1.3 and §7.4.4 - "the installed-application list, read once
- *   when you open the side bar"):
+ *   ("the installed-application list, read once when you open the side bar"):
  *
  *     HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths    (exe paths)
  *     HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall    (names)

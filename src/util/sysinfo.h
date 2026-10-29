@@ -33,7 +33,7 @@ extern "C" {
  * Read from the process token, not from IsUserAnAdmin(): the latter is
  * deprecated, and the token answers the question that actually matters here -
  * whether Windows will let us move the window of an elevated process at all
- * (UIPI; see docs/架构与数据结构.md section 7.5).
+ * (UIPI).
  *
  * Never fails. An unreadable token reports "not elevated", which is the safe
  * answer: nothing privileged is attempted on the strength of it, and the

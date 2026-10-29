@@ -355,7 +355,7 @@ static void tray_remove(void)
  *
  * The permission state is here because it decides what the program can do:
  * without it an elevated window that refuses to move looks like a bug in this
- * program rather than a boundary of the system (docs/架构与数据结构.md 7.5).
+ * program rather than a boundary of the system.
  */
 static void refresh_status(void)
 {
@@ -491,8 +491,8 @@ static void rules_display_name(const Rule *r, wchar_t *out, size_t cch)
 /*
  * The zone as the user thinks of it.
  *
- * The two kinds of preset print differently because they MEAN different things
- * (docs/架构与数据结构.md 2.1.1): a fractional one is a share of the screen,
+ * The two kinds of preset print differently because they MEAN different things:
+ * a fractional one is a share of the screen,
  * a remembered one is a pixel size that merely happens to be positioned by
  * fraction. Showing a remembered 1280x1600 as "50%x100%" would hide the very
  * distinction that decides how it behaves on another monitor.
@@ -630,7 +630,7 @@ static void refresh_all(void)
  *
  * Doing it the other way (fractions for the size too) would turn a 1280x1600
  * half-screen window into "half of whatever screen it lands on", which is the
- * bug that reshaped a 16:9 window into 9:16 (docs/架构与数据结构.md 2.1.1).
+ * bug that reshaped a 16:9 window into 9:16.
  */
 /*
  * The preset most recently created by anchor_window(), or empty.
@@ -1247,7 +1247,7 @@ static void cmd_create_preset(void)
  * what typing a percentage means: "the left half", not "the size it happened to
  * be". Leaving a stale measured size in place would make the typed width
  * ignored on the next apply, which is the two-sources-of-truth bug the whole
- * design avoids (docs/架构与数据结构.md 2.1.1).
+ * design avoids.
  */
 static void cmd_save_preset(void)
 {
@@ -1722,7 +1722,7 @@ static void cmd_close_workspace(const char *id)
  * after (reported by the user). The capability is being moved into the
  * full-screen workspace editor, where the workspace is on screen while it is
  * edited; until then the command is reachable from nothing, and is kept
- * deliberately rather than deleted (docs/手册.md section 8.13).
+ * deliberately rather than deleted.
  */
 static void cmd_add_slot(const char *ws_id)
 {
@@ -2385,7 +2385,7 @@ static void cmd_edit_overlay(const char *id)
  *
  * The overlay disappears the instant the session ends, so without this the
  * user has no idea what they pressed - which is exactly the complaint that
- * produced this function (docs/进度记录.md, the t05 hotkey investigation:
+ * produced this function (the t05 hotkey investigation:
  * "I do not know what I hit"). The exit paths have different names, so the
  * message can say which one it was.
  */
@@ -2626,7 +2626,7 @@ static void handle_command(MainWindowCommand cmd, const char *workspace_id,
     case MW_CMD_OPEN_STARTUP: {
         /*
          * The guide's one button. The program still does not ADD anything to
-         * the startup folder (docs/安全设计.md section 5.4) - it only opens
+         * the startup folder - it only opens
          * the folder so the user can put their own shortcut there.
          */
         wchar_t dir[MAX_PATH];
@@ -3764,7 +3764,7 @@ int WINAPI wWinMain(HINSTANCE hinst, HINSTANCE prev, PWSTR cmdline, int show)
         } else {
             /* Not fatal: everything except "start the program yourself" still
              * works without it, so this does not stop the program or show a
-             * dialog at start-up (docs/安全设计.md section 5.4). */
+             * dialog at start-up. */
             log_info(L"watch: could not start listening");
         }
     }

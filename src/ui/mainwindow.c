@@ -1,7 +1,7 @@
 /*
  * mainwindow.c - the main window.
  *
- * STRUCTURE (see docs/架构与数据结构.md section 1.4)
+ * STRUCTURE
  *
  *   One window, several pages that replace each other's content, and no menu
  *   bar. The layout from top to bottom is:
@@ -1442,8 +1442,7 @@ static void layout_children(MainWindow *mw)
              * The COMMANDS are kept (MW_CMD_ADD_SLOT / MW_CMD_REMOVE_SLOT and
              * their handlers in main.c): the capability moves into the
              * full-screen workspace editor, where the whole workspace is on
-             * screen and the change can be seen as it is made. See
-             * docs/手册.md section 8.13.
+             * screen and the change can be seen as it is made.
              */
             const HWND row[3] = {
                 mw->buttons[0],  /* Run */
@@ -1459,7 +1458,7 @@ static void layout_children(MainWindow *mw)
              * whatever it is given by the number of buttons: a sixth button
              * there leaves a gap of a few pixels, which reads as one long
              * strip rather than as separate buttons (seen in a screenshot,
-             * not in any assertion - docs/手册.md section 8.4's lesson).
+             * not in any assertion).
              * Three on this row stay comfortably apart.
              */
             const HWND row[3] = {
@@ -1532,7 +1531,7 @@ static void update_button_states(MainWindow *mw)
      * the buttons are never left clickable but inert.
      *
      * [Edit selected workspace] opens the full-screen editor, and renaming
-     * happens inside it (docs/手册.md section 8.4), so there is deliberately no
+     * happens inside it, so there is deliberately no
      * separate rename button here: two buttons doing one job is how a user
      * learns to distrust the labels.
      */
@@ -2252,7 +2251,7 @@ static void create_pages(MainWindow *mw)
      * when there is at least one monitor to list. The comment that used to sit
      * here said "the list is real" - it was one hard-coded line, and it stayed
      * that way until multi-monitor placement had been measured
-     * (2026-10-09; docs/手册.md section 8.11).
+     * (2026-10-09).
      */
 
     mw->lbl_position = make_control(mw, L"STATIC", i18n_text(STR_LABEL_POSITION),
@@ -2888,8 +2887,8 @@ static void fill_target_combo(MainWindow *mw)
  *
  * Until now this added ONE hard-coded line - "1 (primary)" - while the comment
  * beside the control claimed "the list is real". It was not, and it could not
- * be while multi-monitor placement was untested. It is tested now (docs/手册.md
- * sections 8.9 and 8.10), so the list is built from monitor_enumerate().
+ * be while multi-monitor placement was untested. It is tested now, so the
+ * list is built from monitor_enumerate().
  *
  * WHAT THE CHOICE MEANS - and what it does not
  *

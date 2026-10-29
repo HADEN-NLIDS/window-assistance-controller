@@ -54,7 +54,7 @@ BOOL pickup_layout(RuleSet *rules, PickupSummary *out)
      * investigation into "wac pick never returns". That conclusion was wrong -
      * wac.exe is a WINDOWS-subsystem program, so the shell does not wait for
      * it, and what looked like a hang was the main window opening afterwards.
-     * See docs/进度记录.md ("wac pick 的最终结论"). The diagnostics are gone;
+     * The diagnostics are gone;
      * what remains is that this function is still not verified end to end.
      */
     for (int i = 0; i < n; ++i) {

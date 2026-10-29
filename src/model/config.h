@@ -13,7 +13,7 @@
  *   stick, a network share, or Program Files, writes next to the executable
  *   are redirected to the VirtualStore by UAC - the user then reports that
  *   their settings vanished, and the file is nowhere they would think to
- *   look. See docs/安全设计.md section 3.5.
+ *   look.
  */
 
 #ifndef WAC_CONFIG_H

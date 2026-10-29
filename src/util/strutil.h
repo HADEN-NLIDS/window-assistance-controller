@@ -9,8 +9,8 @@
  * SAFETY
  *
  *   All output buffers are explicitly sized and every function truncates
- *   rather than overruns. The project disables strcpy/strcat/sprintf
- *   (docs/安全设计.md section 4.3); these wrappers use the strsafe family
+ *   rather than overruns. The project disables strcpy/strcat/sprintf;
+ *   these wrappers use the strsafe family
  *   internally so callers never need to reach for the unsafe forms.
  *
  * ENCODING

@@ -176,7 +176,7 @@ static void test_missing_file(void)
 
     /* Poison the pointer so a successful load is unambiguous, then check
      * that a missing file leaves it NULL rather than half-initialised. */
-    StoreDocument *doc = (StoreDocument *)0xA5A5A5A5;
+    StoreDocument *doc = (StoreDocument *)(ULONG_PTR)0xA5A5A5A5;
 
     StoreLoadResult r = store_load(path, &doc);
     ok_int(L"returns STORE_MISSING", r, STORE_MISSING);

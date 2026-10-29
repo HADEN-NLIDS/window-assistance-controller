@@ -10,7 +10,7 @@
  *
  * WHY THE GAP IS IN PIXELS
  *
- *   docs/分段式编程计划.md specifies gap_px with a default of 8, and pixels are
+ *   The plan specifies gap_px with a default of 8, and pixels are
  *   the right unit for it: a gap exists so that two touching windows still read
  *   as two windows, and that is a property of the eye at a given DPI, not a
  *   fraction of the monitor. A 1% gap on a 2560-wide screen would be 25 px, and

@@ -19,7 +19,7 @@
  *
  *   Which SIZE a rule means depends on how it was created, and getting this
  *   wrong is the bug that reshaped a 16:9 window into 9:16 on a portrait
- *   panel (see docs/架构与数据结构.md 2.1.1):
+ *   panel:
  *
  *     zone rule       --zone 0,0,0.5,1
  *                     "the left half of the screen". w and h are fractions of

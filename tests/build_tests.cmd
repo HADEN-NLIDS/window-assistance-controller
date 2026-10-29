@@ -28,7 +28,7 @@ if not exist "%OUTDIR%" mkdir "%OUTDIR%" >nul 2>nul
 REM ---- flags -------------------------------------------------
 REM  Console subsystem, no manifest. /utf-8 keeps the Chinese comments
 REM  and any Chinese string literals from tripping warning C4819.
-set "CFLAGS=/nologo /TC /O1 /MT /GS /W4 /WX- /utf-8 /Zc:preprocessor /DNDEBUG /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE"
+set "CFLAGS=/nologo /TC /O1 /MT /GS /W4 /WX /utf-8 /Zc:preprocessor /DNDEBUG /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS"
 set "CFLAGS=%CFLAGS% /I"%WAC_ROOT%\tests""
 set "LDFLAGS=/NOLOGO /SUBSYSTEM:CONSOLE /OPT:REF /OPT:ICF"
 REM  System libraries every test program may need. Listed explicitly:

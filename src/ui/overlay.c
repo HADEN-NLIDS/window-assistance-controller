@@ -133,8 +133,7 @@
  * It exists ONLY while the panel is moving: sidebar_advance() says whether
  * there is another frame to draw, and the timer is killed the moment it says
  * no. An editor sitting open with the panel parked - out or away - has no
- * timer at all, which is what keeps the idle-CPU budget at 0.0% (docs/手册.md
- * section 1.2).
+ * timer at all, which is what keeps the idle-CPU budget at 0.0%.
  *
  * 16 ms is one frame at 60 Hz. The slide is SIDEBAR_SLIDE_MS long, so a whole
  * slide is about nine frames.
@@ -1013,8 +1012,8 @@ static void paint_back_buffer(Overlay *o)
      * So it is not permanent any more - it is shown once, for
      * OVERLAY_INTRO_MS, and then the canvas is the user's alone. The one
      * failure this design must never have is a user who cannot work out how to
-     * leave (docs/进度记录.md, 2026-09-22 - an exit key that only exists in the
-     * documentation is an exit key that does not exist), and that is still
+     * leave (an exit key that only exists in the documentation is an exit key
+     * that does not exist), and that is still
      * covered: the [exit] button is on the toolbar for the whole session, and
      * it is there before, during and after these few seconds.
      */
@@ -2035,8 +2034,8 @@ static LRESULT CALLBACK overlay_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
              * underneath this one.
              *
              * This button sat greyed out for a long time because the command
-             * line behind it silently did nothing (docs/进度记录.md, 2026-09-22
-             * - "wac pick does not write the file, cause unknown"). The cause
+             * line behind it silently did nothing
+             * ("wac pick does not write the file, cause unknown"). The cause
              * turned out to be a whitelist missing the word "pick", so the
              * command was never executed at all.
              */
@@ -3366,7 +3365,7 @@ static void name_edit_cancel(Overlay *o)
  * the overlay that owns it no longer has the keyboard.
  *
  * Subclassing a window this process created itself is ordinary. The rule that
- * forbids subclassing is about OTHER processes' windows (docs/安全设计.md).
+ * forbids subclassing is about OTHER processes' windows.
  */
 static LRESULT CALLBACK name_edit_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -3392,7 +3391,7 @@ static LRESULT CALLBACK name_edit_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
  * composited as a single unit, so a child control inside the overlay would not
  * be drawn at all. And text the overlay paints itself never enters the IME
  * composition, so a Chinese name could not be typed into it - MEASURED as the
- * constraint on 2026-09-22 (docs/进度记录.md, "重命名整合进全屏编辑").
+ * constraint on 2026-09-22.
  *
  * It is placed exactly over the drawn box, so the two agree pixel for pixel.
  */
@@ -3973,7 +3972,7 @@ BOOL overlay_show(Overlay *o)
      * AttachThreadInput borrows the foreground thread's input state for the
      * duration of the call, making the request legitimate. It is the standard
      * technique, and unlike a keyboard hook it costs nothing and watches
-     * nothing - docs/安全设计.md rules out WH_KEYBOARD_LL outright.
+     * nothing - WH_KEYBOARD_LL is ruled out outright.
      *
      * Failing is survivable now that WS_EX_NOACTIVATE is gone: a click on the
      * overlay also activates it. It is still recorded, because "the exit key
@@ -4063,7 +4062,7 @@ void overlay_destroy(Overlay *o)
      * DestroyWindow on the overlay would take it down as a side effect of
      * ownership - and a resource that dies as a side effect is one the leak gate
      * cannot attribute to anything. This is the single release point the design
-     * asks for, in reverse order of creation (docs/手册.md section 8.4).
+     * asks for, in reverse order of creation.
      */
     name_edit_close(o);
 

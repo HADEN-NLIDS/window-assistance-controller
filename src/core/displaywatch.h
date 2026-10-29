@@ -127,8 +127,8 @@ typedef struct {
  * Compare two monitor sets.
  *
  * Identity is the device name first and the EDID name second - the two levels
- * that survive their respective operations (docs/手册.md section 8.10 measured
- * which one breaks for which operation). GEOMETRY IS NOT AN IDENTITY HERE, and
+ * that survive their respective operations (measured on real hardware).
+ * GEOMETRY IS NOT AN IDENTITY HERE, and
  * that is the whole point of the `geometry_only` count: a resolution change
  * must be reported as a change, while monitor_match() is free to treat equal
  * geometry as evidence when it is looking for a slot's monitor.

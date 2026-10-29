@@ -155,8 +155,8 @@ BOOL cli_attach_console(void)
  * anyway), no config change, and one ordinary-looking start-up/shutdown pair in
  * the log.
  *
- * That is what "wac pick does not write the file, cause unknown" (docs/进度记录.md,
- * 2026-09-22) actually was: the command never ran. MEASURED 2026-10-11 -
+ * That is what "wac pick does not write the file, cause unknown" actually was:
+ * the command never ran. MEASURED 2026-10-11 -
  * calling pickup_layout() directly from a console test (tests/t73_pickup.c)
  * turns four windows into four presets in 0 ms, so the function was never the
  * problem.

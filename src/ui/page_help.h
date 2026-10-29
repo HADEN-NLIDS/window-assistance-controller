@@ -4,12 +4,12 @@
  * WHAT IT IS FOR
  *
  *   Two things the program deliberately does NOT do for the user still have to
- *   be explained where the user is: starting with Windows (docs/安全设计.md
- *   section 5.4 - no shortcut is written, no registry key is touched) and
+ *   be explained where the user is: starting with Windows
+ *   (no shortcut is written, no registry key is touched) and
  *   dealing with elevated windows (UIPI - the program reports PLACE_DENIED and
  *   does not try to get around it).
  *
- *   The content mirrors docs/使用指南.md. That document is the source: if the
+ *   The content mirrors the usage guide, which is the source: if the
  *   page and the guide ever disagree, the user has no way to tell which one is
  *   lying, so they are edited together.
  *

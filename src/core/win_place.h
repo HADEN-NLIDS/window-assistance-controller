@@ -5,7 +5,7 @@
  *
  *   SetWindowPos returning TRUE means Windows accepted the request, NOT that
  *   the window ended up where it was asked to be. Stage 1 measured this
- *   directly (docs/P0验证记录.md, experiment 3):
+ *   directly (experiment 3):
  *
  *     - a window with WS_THICKFRAME refused to resize anyway;
  *     - an elevated process (UU accelerator) returned ERROR_ACCESS_DENIED for

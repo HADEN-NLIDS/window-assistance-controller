@@ -170,6 +170,7 @@ static const struct { StrId id; const char *name; } k_finished[] = {
 
 static void test_templates(WacLanguage lang, const wchar_t *lang_name)
 {
+    (void)lang;
     T_SEC(L"templates (%ls)", lang_name);
 
     const int n = (int)(sizeof(k_templates) / sizeof(k_templates[0]));

@@ -1,7 +1,7 @@
 /*
  * mainwindow.h - the main window, which is this program's primary entry point.
  *
- * DESIGN DECISION (see docs/分段式编程计划.md, stage 2)
+ * DESIGN DECISION
  *
  *   The main window is THE entry point, not a tray menu. Editing presets is
  *   a frequent action, and making the user right-click a tray icon for every
@@ -21,8 +21,7 @@
  *   Created once at startup and lives for the whole run (possibly hidden).
  *   It is deliberately NOT part of the "edit mode" resources that
  *   release_edit_resources() tears down: rebuilding a window every time the
- *   user leaves an edit session would be slower and leak-prone. See
- *   docs/架构与数据结构.md section 1.2.
+ *   user leaves an edit session would be slower and leak-prone.
  */
 
 #ifndef WAC_MAINWINDOW_H

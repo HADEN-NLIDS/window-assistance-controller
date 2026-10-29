@@ -274,7 +274,7 @@ PlaceResult win_place_apply(const PlaceRequest *req, PlaceReport *out)
              * amount of retrying changes that. Reported, never worked
              * around: a normal process driving an elevated one is exactly
              * what the integrity mechanism exists to prevent, and defeating
-             * it is out of scope by design (see docs/安全设计.md).
+             * it is out of scope by design.
              */
             local.result = PLACE_DENIED;
             get_rect(req->hwnd, &local.after);

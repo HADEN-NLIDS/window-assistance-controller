@@ -4,8 +4,8 @@
  * WHY THE PAGE AND THE DATA LIVE TOGETHER
  *
  *   These used to be split: settings_dlg.c owned the values and showed them in
- *   a modal dialog. Stage 4.5 page-ifies settings (docs/架构与数据结构.md
- *   section 1.4 rule 3), so the dialog frame goes away - and what is left is
+ *   a modal dialog. Stage 4.5 page-ifies settings, so the dialog frame goes
+ *   away - and what is left is
  *   "the values the user can change" plus "the controls that change them".
  *   Keeping them in one file means adding a setting touches one header.
  *
