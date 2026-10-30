@@ -38,11 +38,13 @@
 #include "util/strutil.h"
 #include "util/sysinfo.h"
 #include "core/win_enum.h"
+#include "core/relcoord.h"      /* rel_from_pixels: a dropped program keeps its size */
 #include "core/monitor.h"
 #include "core/displaywatch.h"  /* WM_DISPLAYCHANGE: debounce + topology diff */
 #include "core/rule_apply.h"
 #include "core/winwatch.h"
 #include "core/appindex.h"      /* the installed-application list (stage 8) */
+#include "core/watchdog.h"      /* edit-mode guard: an independent thread (6.10) */
 #include "model/store.h"
 #include "model/workspace.h"
 #include "model/workspace_run.h"
@@ -1987,12 +1989,60 @@ static void on_overlay_drop(const wchar_t *exe_path, const RelRect *zone, void *
 
     if (exe_path == NULL || zone == NULL) return;
 
+    /*
+     * The drop decides WHERE. The SIZE comes from the window itself when that
+     * program is running: dragging an application onto the canvas should not
+     * force it to half the screen, which is what the fixed drop rectangle did.
+     */
+    RelRect drop = *zone;
+    {
+        static WindowInfo wins[WAC_WIN_MAX];
+        const int n = win_enum_top(wins, WAC_WIN_MAX,
+                                   WIN_ENUM_VISIBLE_ONLY | WIN_ENUM_SKIP_TOOLWIN |
+                                   WIN_ENUM_NEED_TITLE);
+        const wchar_t *want = win_file_name(exe_path);
+
+        for (int i = 0; i < n; ++i) {
+            wchar_t path[MAX_PATH];
+            if (!win_exe_path(wins[i].pid, path, MAX_PATH)) continue;
+            if (_wcsicmp(win_file_name(path), want) != 0) continue;
+
+            static MonitorFingerprint mons[WAC_MON_MAX];
+            const int mc = monitor_enumerate(mons, WAC_MON_MAX);
+
+            const int cx = (wins[i].rect.left + wins[i].rect.right) / 2;
+            const int cy = (wins[i].rect.top + wins[i].rect.bottom) / 2;
+            const int mi = (mc > 0) ? monitor_at_point(mons, mc, cx, cy) : -1;
+            if (mi < 0) break;
+
+            RECT mon;
+            mon.left   = mons[mi].virtual_x;
+            mon.top    = mons[mi].virtual_y;
+            mon.right  = mon.left + mons[mi].width;
+            mon.bottom = mon.top + mons[mi].height;
+
+            RelRect rel;
+            if (rel_from_pixels(&wins[i].rect, &mon, &rel)) {
+                drop.w = rel.w;
+                drop.h = rel.h;
+                if (drop.x + drop.w > 1.0f) drop.x = 1.0f - drop.w;
+                if (drop.y + drop.h > 1.0f) drop.y = 1.0f - drop.h;
+                if (drop.x < 0.0f) drop.x = 0.0f;
+                if (drop.y < 0.0f) drop.y = 0.0f;
+
+                log_info(L"sidebar: \"%ls\" is running - dropping at its own size %.0fx%.0f",
+                         want, rel.w * 100.0f, rel.h * 100.0f);
+            }
+            break;
+        }
+    }
+
     AppId app;
     ZeroMemory(&app, sizeof(app));
     wcsncpy_s(app.exe_name, WAC_EXE_MAX, win_file_name(exe_path), _TRUNCATE);
     wcsncpy_s(app.exe_path, WAC_EXE_MAX, exe_path, _TRUNCATE);
 
-    const int idx = rules_upsert(&g_app.rules, &app, zone, NULL);
+    const int idx = rules_upsert(&g_app.rules, &app, &drop, NULL);
     if (idx < 0) {
         log_info(L"sidebar: the preset for \"%ls\" could not be saved", exe_path);
         return;
@@ -2170,6 +2220,52 @@ static void on_slot_moved(void *ctx, int index, const RelRect *zone)
 }
 
 /*
+ * The user pressed Delete on a selected box.
+ *
+ * Removing the box means taking the preset out of THIS workspace, not deleting
+ * the preset: another workspace may use it, and "I changed my mind about this
+ * layout" is not "forget this program's position forever". Deleting the preset
+ * stays on the preset page, where the action can say what it does.
+ *
+ * The view index is not the slot index - build_slot_view() skips slots it
+ * cannot resolve - so the match is by preset id.
+ */
+static void on_slot_deleted(void *ctx, int index)
+{
+    (void)ctx;
+
+    if (index < 0 || index >= g_slot_view_count) return;
+
+    const char *ws_id = mainwindow_selected_id(g_app.window);
+    Workspace *w = (ws_id != NULL) ? ws_find(&g_app.workspaces, ws_id) : NULL;
+    if (w == NULL) return;
+
+    const char *rule_id = g_slot_view[index].rule_id;
+
+    for (int i = 0; i < w->slot_count; ++i) {
+        if (_stricmp(w->slots[i].preset_id, rule_id) != 0) continue;
+
+        if (!ws_slot_remove(w, i)) {
+            log_info(L"edit-delete: \"%hs\" could not be removed from \"%hs\"",
+                     rule_id, ws_id);
+            return;
+        }
+
+        save_all();
+        log_info(L"edit-delete: \"%hs\" removed from workspace \"%hs\"",
+                 rule_id, ws_id);
+
+        edit_push_slots();   /* the canvas no longer draws it */
+
+        wchar_t msg[256];
+        _snwprintf_s(msg, 256, _TRUNCATE, i18n_text(STR_MSG_EDIT_REMOVED_FMT),
+                     g_slot_view[index].name);
+        mainwindow_set_status(g_app.window, msg);
+        return;
+    }
+}
+
+/*
  * [Apply]: write every box back to the preset it belongs to.
  *
  * Only x/y/w/h move. abs_w / abs_h and the monitor binding are left exactly as
@@ -2180,6 +2276,7 @@ static void on_slots_apply(void *ctx)
 {
     (void)ctx;
 
+    const char *changed_ids[MW_SLOT_MAX];
     int changed = 0;
 
     for (int i = 0; i < g_slot_view_count; ++i) {
@@ -2195,6 +2292,7 @@ static void on_slots_apply(void *ctx)
                 rule->zone.y = v->zone.y;
                 rule->zone.w = v->zone.w;
                 rule->zone.h = v->zone.h;
+                if (changed < MW_SLOT_MAX) changed_ids[changed] = rule->id;
                 changed++;
             }
             break;
@@ -2218,6 +2316,28 @@ static void on_slots_apply(void *ctx)
     }
 
     log_info(L"edit-apply: %d preset(s) updated from the canvas", changed);
+
+    /*
+     * Put the real windows where the edited boxes say.
+     *
+     * The overlay covers them, so the move is seen when edit mode ends - which
+     * is also when the user looks. Only the presets that changed are swept, so
+     * a box the user did not touch leaves its window alone.
+     */
+    int placed = 0;
+    for (int i = 0; i < changed && i < MW_SLOT_MAX; ++i) {
+        RuleApplyOptions opt;
+        ZeroMemory(&opt, sizeof(opt));
+        opt.only_id   = changed_ids[i];
+        opt.monitor   = -1;
+        opt.move_only = FALSE;
+
+        RuleApplySummary sum;
+        ZeroMemory(&sum, sizeof(sum));
+        rule_apply_ex(&g_app.rules, &opt, NULL, NULL, &sum);
+        placed += sum.placed;
+    }
+    log_info(L"edit-apply: %d window(s) placed", placed);
 
     wchar_t msg[128];
     _snwprintf_s(msg, 128, _TRUNCATE, i18n_text(STR_MSG_EDIT_APPLIED_FMT), changed);
@@ -2306,6 +2426,7 @@ static void edit_push_slots(void)
     src.apply      = on_slots_apply;
     src.reset      = on_slots_reset;
     src.pick       = on_pick_layout;
+    src.deleted    = on_slot_deleted;
 
     edit_set_slots(&src);
 }
@@ -2374,8 +2495,12 @@ static void cmd_edit_overlay(const char *id)
     }
     edit_push_sidebar();
     edit_push_slots();
+    edit_set_taskbar_guide(g_app.settings.taskbar_guide);
 
     mode_transition(MODE_EDIT_OVERLAY);
+    if (!watchdog_start(edit_overlay_hwnd())) {
+        log_info(L"watchdog: could not be started - the session has no guard");
+    }
     mainwindow_set_status(g_app.window, i18n_text(STR_MSG_EDIT_ENTERED));
     log_info(L"edit: entered on monitor %d, naming \"%ls\"", mi, wname);
 }
@@ -2409,6 +2534,33 @@ static void report_edit_exit(OverlayExit why)
 
     log_info(L"edit: reported the exit to the status bar (%ls)",
              overlay_exit_name(why));
+}
+
+/*
+ * End the session in one place: stop the guard, report, and change mode.
+ *
+ * There are two call sites - a session that ends inside edit_handle_message
+ * (the fuse) and one that ends after DispatchMessage - and both must stop the
+ * guard. A missed stop would leave a thread behind per session, and t51 runs
+ * fifty sessions in a row.
+ */
+static void finish_edit_session(void)
+{
+    watchdog_stop();
+
+    const BOOL by_guard = watchdog_fired();
+
+    report_edit_exit(edit_exit_reason());
+    mode_transition(MODE_IDLE);
+
+    /*
+     * The overlay reports a WM_CLOSE as a toolbar exit, which would be a lie
+     * here: say what actually happened. The log line is for the same reason.
+     */
+    if (by_guard) {
+        log_info(L"watchdog: the edit session was closed by the guard");
+        mainwindow_set_status(g_app.window, i18n_text(STR_MSG_EDIT_WATCHDOG));
+    }
 }
 
 /*
@@ -3769,6 +3921,12 @@ int WINAPI wWinMain(HINSTANCE hinst, HINSTANCE prev, PWSTR cmdline, int show)
         }
     }
 
+    /*
+     * The layout fill listener is NOT started here: it belongs to the edit
+     * session (cmd_edit_overlay), because outside edit mode the system's own
+     * snap layouts do the job better and a second one would fight them.
+     */
+
     mainwindow_show(g_app.window);
 
     if (first_run) {
@@ -3781,6 +3939,9 @@ int WINAPI wWinMain(HINSTANCE hinst, HINSTANCE prev, PWSTR cmdline, int show)
     /* ---- message loop --------------------------------------------- */
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+        /* The guard is alive only while a session is; see core/watchdog.h. */
+        watchdog_tick();
+
         /*
          * Order matters here.
          *
@@ -3805,8 +3966,7 @@ int WINAPI wWinMain(HINSTANCE hinst, HINSTANCE prev, PWSTR cmdline, int show)
              * touched the keyboard.
              */
             if (edit_poll()) {
-                report_edit_exit(edit_exit_reason());
-                mode_transition(MODE_IDLE);
+                finish_edit_session();
             }
             continue;
         }
@@ -3825,12 +3985,12 @@ int WINAPI wWinMain(HINSTANCE hinst, HINSTANCE prev, PWSTR cmdline, int show)
          * called from, so there is one release point (ui/editstate.h).
          */
         if (edit_poll()) {
-            report_edit_exit(edit_exit_reason());
-            mode_transition(MODE_IDLE);
+            finish_edit_session();
         }
     }
 
     /* ---- shutdown ------------------------------------------------- */
+    watchdog_stop();
     mode_transition(MODE_SHUTTING_DOWN);
 
     if (g_app.hotkey_ok) {

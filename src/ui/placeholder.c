@@ -66,13 +66,25 @@ BOOL placeholder_is_visible(const RECT *box)
             (box->bottom - box->top) >= PLACEHOLDER_MIN_H) ? TRUE : FALSE;
 }
 
-BOOL placeholder_icon_rect(const PlaceholderMetrics *m, const RECT *box, RECT *out)
+/*
+ * The top of the label block: the box's own top, unless the caller's floor is
+ * lower. One helper for the three rows so that the icon, the name and the
+ * size can never slide down by different amounts.
+ */
+static int label_top(const PlaceholderMetrics *m, const RECT *box, int min_top)
+{
+    const int top = box->top + m->pad;
+    return (top < min_top) ? min_top : top;
+}
+
+BOOL placeholder_icon_rect(const PlaceholderMetrics *m, const RECT *box,
+                           int min_top, RECT *out)
 {
     if (m == NULL || box == NULL || out == NULL) return FALSE;
     if (rect_empty(box)) return FALSE;
 
     out->left   = box->left + m->pad;
-    out->top    = box->top  + m->pad;
+    out->top    = label_top(m, box, min_top);
     out->right  = out->left + m->icon;
     out->bottom = out->top  + m->icon;
 
@@ -84,28 +96,34 @@ BOOL placeholder_icon_rect(const PlaceholderMetrics *m, const RECT *box, RECT *o
     return TRUE;
 }
 
-BOOL placeholder_name_rect(const PlaceholderMetrics *m, const RECT *box, RECT *out)
+BOOL placeholder_name_rect(const PlaceholderMetrics *m, const RECT *box,
+                           int min_top, RECT *out)
 {
     if (m == NULL || box == NULL || out == NULL) return FALSE;
     if (rect_empty(box)) return FALSE;
 
     out->left   = box->left + m->pad + m->icon + m->pad;
     out->right  = box->right - m->pad;
-    out->top    = box->top + m->pad;
+    out->top    = label_top(m, box, min_top);
     out->bottom = out->top + m->icon;   /* the icon's row: the two line up */
 
     if (rect_empty(out)) return FALSE;
+    if (out->right <= out->left) return FALSE;
+    if (out->bottom > box->bottom - m->pad) return FALSE;
     return TRUE;
 }
 
-BOOL placeholder_size_rect(const PlaceholderMetrics *m, const RECT *box, RECT *out)
+BOOL placeholder_size_rect(const PlaceholderMetrics *m, const RECT *box,
+                           int min_top, RECT *out)
 {
     if (m == NULL || box == NULL || out == NULL) return FALSE;
     if (rect_empty(box)) return FALSE;
 
-    out->left   = box->left + m->pad;
+    /* Same left edge as the name line, so the two rows of text line up even
+     * when there is no icon to fill the left slot. */
+    out->left   = box->left + m->pad + m->icon + m->pad;
     out->right  = box->right - m->pad;
-    out->top    = box->top + m->pad + m->icon + 2;
+    out->top    = label_top(m, box, min_top) + m->icon + 2;
     out->bottom = out->top + m->line_h;
 
     if (rect_empty(out)) return FALSE;
@@ -148,6 +166,36 @@ BOOL placeholder_grip_rect(const PlaceholderMetrics *m, const RECT *box, RECT *o
     return TRUE;
 }
 
+BOOL placeholder_close_rect(const PlaceholderMetrics *m, const RECT *box,
+                            int min_top, RECT *out)
+{
+    if (m == NULL || box == NULL || out == NULL) return FALSE;
+    if (rect_empty(box)) return FALSE;
+
+    int g = m->grip;
+    const int bw = box->right - box->left;
+    const int bh = box->bottom - box->top;
+    if (g > bw / 3) g = bw / 3;
+    if (g > bh / 3) g = bh / 3;
+    if (g <= 0) return FALSE;
+
+    out->left   = box->right - g;
+    out->right  = box->right;
+    out->top    = box->top;
+    out->bottom = box->top + g;
+
+    /* A box dragged to the very top would put the button under the toolbar,
+     * which owns the click there (overlay.c). Move it down instead - a button
+     * that cannot be clicked is not a button. */
+    if (out->top < min_top) {
+        const int dy = min_top - out->top;
+        out->top    += dy;
+        out->bottom += dy;
+        if (out->bottom > box->bottom) return FALSE;
+    }
+    return TRUE;
+}
+
 /* Half-open containment, the same rule the rest of the project uses. */
 static BOOL rect_contains(const RECT *r, POINT pt)
 {
@@ -156,7 +204,7 @@ static BOOL rect_contains(const RECT *r, POINT pt)
 }
 
 PlaceholderHit placeholder_hit(const RECT *boxes, int count,
-                               const PlaceholderMetrics *m, POINT pt)
+                               const PlaceholderMetrics *m, int min_top, POINT pt)
 {
     PlaceholderHit none;
     none.kind  = PLACEHOLDER_HIT_NONE;
@@ -167,6 +215,15 @@ PlaceholderHit placeholder_hit(const RECT *boxes, int count,
     /* Top of the stack first: the boxes were drawn in array order, so the last
      * one drawn is the one the user can see and reach. */
     for (int i = count - 1; i >= 0; --i) {
+        RECT close;
+        if (placeholder_close_rect(m, &boxes[i], min_top, &close) &&
+            rect_contains(&close, pt)) {
+            PlaceholderHit h;
+            h.kind  = PLACEHOLDER_HIT_CLOSE;
+            h.index = i;
+            return h;
+        }
+
         RECT grip;
         if (placeholder_grip_rect(m, &boxes[i], &grip) && rect_contains(&grip, pt)) {
             PlaceholderHit h;

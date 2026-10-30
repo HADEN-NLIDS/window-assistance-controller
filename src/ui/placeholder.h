@@ -93,14 +93,25 @@ BOOL placeholder_rect(const RelRect *zone, const RECT *area, RECT *out);
 /* Is this box big enough to say anything in? See PLACEHOLDER_MIN_W. */
 BOOL placeholder_is_visible(const RECT *box);
 
-/* The icon's square, in the box's top-left corner. FALSE when it does not fit. */
-BOOL placeholder_icon_rect(const PlaceholderMetrics *m, const RECT *box, RECT *out);
+/*
+ * The label block: the icon square, the name line and the size readout.
+ *
+ * `min_top` is a floor, the same one the delete button takes: a box dragged
+ * to the very top would put its text under the toolbar, where the toolbar
+ * wins the click and the text is covered. The block slides down together so
+ * its internal alignment does not change; FALSE when the box is too short to
+ * hold a row at that floor.
+ */
+BOOL placeholder_icon_rect(const PlaceholderMetrics *m, const RECT *box,
+                           int min_top, RECT *out);
 
 /* The name's line: to the right of the icon, on the icon's row. */
-BOOL placeholder_name_rect(const PlaceholderMetrics *m, const RECT *box, RECT *out);
+BOOL placeholder_name_rect(const PlaceholderMetrics *m, const RECT *box,
+                           int min_top, RECT *out);
 
 /* The size readout: the full width under the icon row. */
-BOOL placeholder_size_rect(const PlaceholderMetrics *m, const RECT *box, RECT *out);
+BOOL placeholder_size_rect(const PlaceholderMetrics *m, const RECT *box,
+                           int min_top, RECT *out);
 
 /* ------------------------------------------------------------------ */
 /* Editing a box: what is under the pointer, and where it goes next     */
@@ -110,9 +121,24 @@ BOOL placeholder_size_rect(const PlaceholderMetrics *m, const RECT *box, RECT *o
  * small to hold one without it covering the whole box. */
 BOOL placeholder_grip_rect(const PlaceholderMetrics *m, const RECT *box, RECT *out);
 
+/*
+ * The delete button, in the box's TOP-right corner.
+ *
+ * The keyboard was the obvious way to remove a box and it does not work: the
+ * overlay never takes focus, so Delete never arrives. A visible button is the
+ * reliable answer - it is also discoverable, which a hidden shortcut is not.
+ *
+ * `min_top` is a floor for the button: a box dragged to the very top would put
+ * it under the toolbar, where the toolbar wins the click. It is moved down to
+ * min_top so it stays usable; FALSE when the box is too short to hold it there.
+ */
+BOOL placeholder_close_rect(const PlaceholderMetrics *m, const RECT *box,
+                            int min_top, RECT *out);
+
 typedef enum {
     PLACEHOLDER_HIT_NONE = 0,
-    PLACEHOLDER_HIT_GRIP,   /* the resize handle of box `index` */
+    PLACEHOLDER_HIT_CLOSE,  /* the delete button of box `index`   */
+    PLACEHOLDER_HIT_GRIP,   /* the resize handle of box `index`   */
     PLACEHOLDER_HIT_BODY    /* the box itself - drag to move it   */
 } PlaceholderHitKind;
 
@@ -133,7 +159,7 @@ typedef struct {
  * pointing at.
  */
 PlaceholderHit placeholder_hit(const RECT *boxes, int count,
-                               const PlaceholderMetrics *m, POINT pt);
+                               const PlaceholderMetrics *m, int min_top, POINT pt);
 
 /*
  * The box moved by (dx, dy), kept inside `area`.

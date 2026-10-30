@@ -20,6 +20,7 @@
 
 #include <stdio.h>      /* _snwprintf_s */
 #include <stdlib.h>     /* calloc / free                                            */
+#include <shellapi.h>   /* SHAppBarMessage: the taskbar guide line                  */
                         /*
                          * That include is not decoration. Without it MSVC assumes
                          * calloc returns int, truncates the 64-bit pointer to 32
@@ -47,6 +48,17 @@
 /* Reserved strip at the top for the toolbar (task 6.3). toolbar.h owns the
  * height so the drawn strip and the hit-test rectangles cannot disagree. */
 #define TOOLBAR_H toolbar_strip_h()   /* DPI-scaled: 64 at 96 dpi, 96 at 144 */
+
+/*
+ * What the layout panel lists.
+ *
+ * SNAP_CUSTOM is included again (user, 2026-10-30): choosing it is how a user
+ * EXITS a layout - it clears the regions instead of drawing a template - and
+ * without it there was no way back out of an applied layout. Free-hand
+ * DRAWING is still disabled (WM_LBUTTONDOWN on the canvas no longer starts a
+ * region); only the template choice is back.
+ */
+#define SNAP_PANEL_COUNT (SNAP_COUNT)
 
 /*
  * Longest name the box will hold, including the terminator.
@@ -174,13 +186,12 @@
 /*
  * The zone a dropped application gets, as a fraction of the canvas.
  *
- * Half the width and the full height: the same starting point `create_preset_
- * from_path()` uses for a program that is not running, because a drop says
- * WHERE and the editor is where the size gets decided. Two different defaults
- * for the same question would be one more thing to explain.
+ * Half the width and half the height: the same starting point
+ * `create_preset_from_path()` uses for a program that is not running, because a
+ * drop says WHERE and the editor is where the size gets decided.
  */
 #define SIDEBAR_DROP_W 0.5f
-#define SIDEBAR_DROP_H 1.0f
+#define SIDEBAR_DROP_H 0.5f
 
 /* How far the pointer must travel with the button down before a press on a row
  * becomes a DRAG. The system's own threshold, not a guessed number: it is what
@@ -361,16 +372,34 @@ struct Overlay {
      */
     int                  ph_hover;      /* box under the pointer, or -1 */
     int                  ph_drag;       /* box being dragged, or -1     */
+    int                  ph_snap;       /* layout region the drag would fill, or -1 */
+    int                  ph_snapped;    /* box currently filled into a region, or -1 */
+    RECT                 ph_pre_snap;   /* its rect before that fill     */
     BOOL                 ph_resizing;
     POINT                ph_origin;
     RECT                 ph_start;
     RECT                 ph_now;
+    int                  ph_selected;    /* box selected for Delete, or -1 */
     BOOL                 ph_short_reported;  /* "some boxes did not fit", said once */
+
+    /* The bottom guide line: the taskbar's top edge in physical pixels, 0 when
+     * there is none (hidden, on a side edge, or unavailable). */
+    int                  taskbar_y;
+    BOOL                 guide_on;       /* draw the line and snap to it */
+
+    RECT                 empty_hint;     /* the empty-canvas text's background */
+    BOOL                 empty_hint_valid;
     POINT                sb_press_pt;     /* where the button went down on a row */
     BOOL                 sb_scroll_drag;  /* dragging the scrollbar thumb */
     BOOL                 sb_timer;        /* the slide timer is running */
     BOOL                 intro;           /* the opening text is still up */
     BOOL                 sb_suppress;     /* Esc closed the panel; see sidebar_pointer_moved() */
+
+    /* The pathless rows (programs with no launch path) are a collapsible group
+     * at the end of the list, closed by default: they cannot be launched, and
+     * they are a third of the list on this machine. */
+    BOOL                 sb_show_pathless;
+    int                  sb_pathless_count;
 
     /*
      * What the drag is drawing right now, recorded by draw_sidebar_drag() and
@@ -466,6 +495,9 @@ static void sidebar_pointer_moved(Overlay *o, POINT pt);
 static void draw_sidebar(Overlay *o);
 static void draw_sidebar_drag(Overlay *o);
 static void draw_placeholders(Overlay *o);
+static void draw_snap_preview(Overlay *o);
+static void canvas_area(const Overlay *o, RECT *out);
+static void collect_lines(Overlay *o);
 
 /* The search box's EDIT window. Same reason: the mouse paths open and close it
  * long before its definitions. */
@@ -788,6 +820,9 @@ static void paint_back_buffer(Overlay *o)
         }
     }
 
+    /* ---- the region a drag would fill, under the boxes ---- */
+    draw_snap_preview(o);
+
     /* ---- the placeholders, over the regions ----
      *
      * Drawn here rather than beside the regions because they are the layer the
@@ -795,6 +830,18 @@ static void paint_back_buffer(Overlay *o)
      * workspace already says stays visible underneath it.
      */
     draw_placeholders(o);
+
+    /*
+     * The taskbar guide: a line the bottom edge of a box snaps to. Drawn after
+     * the boxes so one cannot hide it, and before the alpha pass so it can be
+     * made solid there.
+     */
+    if (o->guide_on && o->taskbar_y > 0 && o->taskbar_y < h) {
+        SetDCPenColor(o->mem_dc, RGB(255, 214, 102));
+        SelectObject(o->mem_dc, GetStockObject(DC_PEN));
+        MoveToEx(o->mem_dc, 0, o->taskbar_y, NULL);
+        LineTo(o->mem_dc, w, o->taskbar_y);
+    }
 
     /*
      * The rectangle being dragged, with its size while it is still being
@@ -859,7 +906,14 @@ static void paint_back_buffer(Overlay *o)
      * full-screen window that repaints on its own schedule is exactly what the
      * idle-CPU budget forbids.
      */
-    const BOOL bar_solid = (o->top_hover || o->drag_active) ? TRUE : FALSE;
+    /*
+     * A placeholder drag is a third case: the box may be moved up under the
+     * strip, and the strip has to give way for it to be seen. That is why the
+     * pointer being on the strip does NOT make it solid while a box is being
+     * dragged.
+     */
+    const BOOL ph_editing = (o->ph_drag >= 0) ? TRUE : FALSE;
+    const BOOL bar_solid = (ph_editing) ? FALSE : ((o->top_hover || o->drag_active) ? TRUE : FALSE);
     blend_rect(o, &bar, RGB(8, 16, 34), bar_solid ? 100 : OVERLAY_BAR_MIX);
 
     if (o->item_count > 0) {
@@ -1050,13 +1104,21 @@ static void paint_back_buffer(Overlay *o)
         }
     }
 
-    /* ---- bottom: live geometry, so the numbers can be trusted later ---- */
+    /* ---- bottom: live geometry, so the numbers can be trusted later ----
+     *
+     * Above the taskbar, not at h - 40: a visible taskbar is topmost and would
+     * cut the text in half. The line is also where a box snaps its bottom edge,
+     * so the number and the guide describe the same edge.
+     */
     SetTextColor(o->mem_dc, RGB(150, 170, 210));
     wchar_t line3[160];
     _snwprintf_s(line3, 160, _TRUNCATE, i18n_text(STR_EDIT_OVERLAY_RECT_FMT),
                  (int)o->rect.left, (int)o->rect.top,
                  (int)o->rect.right, (int)o->rect.bottom);
-    TextOutW(o->mem_dc, 24, h - 40, line3, (int)wcslen(line3));
+
+    int line3_y = ((o->guide_on && o->taskbar_y > 0) ? o->taskbar_y : h) - 40;
+    if (line3_y < 0) line3_y = 0;
+    TextOutW(o->mem_dc, 24, line3_y, line3, (int)wcslen(line3));
 
     SelectObject(o->mem_dc, old_font);
 
@@ -1184,6 +1246,16 @@ static void paint_back_buffer(Overlay *o)
      */
     for (int i = 0; i < o->ph_count; ++i) {
         alpha_rect(o, &o->ph_boxes[i], 235);
+    }
+
+    /* The taskbar guide and the empty-canvas strip are solid too: they carry
+     * information, and 59% over a desktop window is information nobody sees. */
+    if (o->guide_on && o->taskbar_y > 0) {
+        RECT gl = { 0, o->taskbar_y - 1, w, o->taskbar_y + 2 };
+        alpha_rect(o, &gl, 235);
+    }
+    if (o->empty_hint_valid) {
+        alpha_rect(o, &o->empty_hint, 235);
     }
 
     /*
@@ -1360,7 +1432,7 @@ static LRESULT CALLBACK overlay_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (!popup_keep_hover(&o->popup, pt)) {
                 layout_panel_close(o);
             } else {
-                const int item = toolbar_panel_hit(&o->popup.panel, (int)SNAP_COUNT, pt);
+                const int item = toolbar_panel_hit(&o->popup.panel, (int)SNAP_PANEL_COUNT, pt);
                 if (item != o->panel_hover) {
                     o->panel_hover = item;
                     RECT pr = o->popup.panel;
@@ -1415,23 +1487,71 @@ static LRESULT CALLBACK overlay_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
          * highlighted so the user can see what a press would grab.
          */
         if (o->ph_drag >= 0) {
+            RECT canvas;
+            canvas_area(o, &canvas);
+
             if (o->ph_resizing) {
-                (void)placeholder_resize_rect(&o->ph_start, pt, &o->sb_area,
+                (void)placeholder_resize_rect(&o->ph_start, pt, &canvas,
                                               PLACEHOLDER_MIN_W, PLACEHOLDER_MIN_H,
                                               &o->ph_now);
             } else {
                 (void)placeholder_move_rect(&o->ph_start,
                                             pt.x - o->ph_origin.x,
                                             pt.y - o->ph_origin.y,
-                                            &o->sb_area, &o->ph_now);
+                                            &canvas, &o->ph_now);
+
+                /* The same lines a hand-drawn region snaps to: the screen
+                 * edges, the template, and the taskbar guide. */
+                snapgrid_snap_rect(&o->ph_now, &o->lines, SNAP_THRESHOLD_PX);
+
+                /*
+                 * The edge preview: the POINTER must touch a screen edge first
+                 * (the user's rule), and only then is the nearest region
+                 * looked up. Being merely INSIDE a region used to be enough,
+                 * which is not an edge at all - the user reported exactly
+                 * that. While the sidebar is out there is no preview: the user
+                 * is carrying a row out of the list, not aiming at an edge.
+                 */
+                const int w = (int)(o->rect.right - o->rect.left);
+                const int h = (int)(o->rect.bottom - o->rect.top);
+                o->ph_snap = -1;
+                if (sidebar_progress(&o->sidebar) <= 0.0f &&
+                    snapgrid_edge_hit(w, h, pt, SNAP_EDGE_BAND_PX)) {
+                    o->ph_snap = snapgrid_pick(o->regions, o->region_count,
+                                               w, h, pt, SNAP_FILL_MAX_FRAC);
+                }
             }
             InvalidateRect(hwnd, NULL, FALSE);
             return 0;
         }
 
-        if (o->slot_src.slot_at != NULL && o->ph_count > 0) {
+        /*
+         * Dragging the scrollbar thumb: the pointer owns the list until the
+         * button comes up. The press has already jumped to the pointer, so
+         * all that is left is to keep following it - and to stay out of
+         * everything below, which would otherwise treat a move over the panel
+         * as a hover, or worse, as "the pointer left the panel".
+         */
+        if (o->sb_scroll_drag) {
+            if (sidebar_enabled(o)) {
+                RECT track, thumb;
+                const int total   = sb_visible_count(o);
+                const int visible = sidebar_visible_rows(&o->sb_metrics, &o->sb_area);
+                if (sidebar_scrollbar_rects(&o->sidebar, &o->sb_metrics, &o->sb_area,
+                                            total, visible, &track, &thumb)) {
+                    sidebar_scroll_to(&o->sidebar,
+                        sidebar_scroll_from_thumb(&track, thumb.bottom - thumb.top,
+                                                  total, visible, pt.y),
+                        total, visible);
+                }
+                sidebar_invalidate(o);
+            }
+            return 0;
+        }
+
+        if (pt.y >= TOOLBAR_H && o->slot_src.slot_at != NULL && o->ph_count > 0) {
             const PlaceholderHit ph = placeholder_hit(o->ph_boxes, o->ph_count,
-                                                      &o->ph_metrics, pt);
+                                                      &o->ph_metrics, TOOLBAR_H, pt);
             const int want = (ph.kind == PLACEHOLDER_HIT_NONE) ? -1 : ph.index;
             if (want != o->ph_hover) {
                 o->ph_hover = want;
@@ -1716,12 +1836,21 @@ static LRESULT CALLBACK overlay_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 sidebar_invalidate(o);
                 return 0;
 
-            case SIDEBAR_HIT_ROW:
+            case SIDEBAR_HIT_ROW: {
+                const int src = sb_row_at(o, sh.row);
+                if (src < 0) {
+                    /* The group header: expand or collapse the pathless rows. */
+                    o->sb_show_pathless = !o->sb_show_pathless;
+                    sb_apply_filter(o);
+                    sidebar_invalidate(o);
+                    return 0;
+                }
                 sidebar_press(&o->sidebar, sh.row);
                 o->sb_press_pt = pt;
                 (void)SetCapture(hwnd);   /* the drag may leave the window */
                 sidebar_invalidate(o);
                 return 0;
+            }
 
             case SIDEBAR_HIT_SCROLLBAR: {
                 RECT track, thumb;
@@ -1763,15 +1892,43 @@ static LRESULT CALLBACK overlay_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
          * there" versus "add something" in this editor, so it is decided here
          * and nowhere else.
          */
-        if (o->slot_src.slot_at != NULL && o->ph_count > 0) {
+        if (pt.y >= TOOLBAR_H && o->slot_src.slot_at != NULL && o->ph_count > 0) {
             const PlaceholderHit ph = placeholder_hit(o->ph_boxes, o->ph_count,
-                                                      &o->ph_metrics, pt);
+                                                      &o->ph_metrics, TOOLBAR_H, pt);
             if (ph.kind != PLACEHOLDER_HIT_NONE && ph.index >= 0) {
+                if (ph.kind == PLACEHOLDER_HIT_CLOSE) {
+                    if (o->slot_src.deleted != NULL) {
+                        o->ph_selected = -1;
+                        o->slot_src.deleted(o->slot_src.ctx, ph.index);
+                    }
+                    return 0;
+                }
+                /*
+                 * A box that was filled into a region comes back to its
+                 * previous shape the moment it is grabbed again: the fill is a
+                 * placement, not a new identity for the box. The restored
+                 * rect goes back through slot_moved so the canvas and the
+                 * saved zone agree before the drag starts.
+                 */
+                RECT start_rect = o->ph_boxes[ph.index];
+                if (o->ph_snapped == ph.index) {
+                    RECT canvas;
+                    canvas_area(o, &canvas);
+                    RelRect back;
+                    if (placeholder_zone_from_rect(&o->ph_pre_snap, &canvas, &back) &&
+                        o->slot_src.slot_moved != NULL) {
+                        o->slot_src.slot_moved(o->slot_src.ctx, ph.index, &back);
+                    }
+                    start_rect    = o->ph_pre_snap;
+                    o->ph_snapped = -1;
+                }
+
+                o->ph_selected = ph.index;
                 o->ph_drag     = ph.index;
                 o->ph_resizing = (ph.kind == PLACEHOLDER_HIT_GRIP) ? TRUE : FALSE;
                 o->ph_origin   = pt;
-                o->ph_start    = o->ph_boxes[ph.index];
-                o->ph_now      = o->ph_start;
+                o->ph_start    = start_rect;
+                o->ph_now      = start_rect;
                 (void)SetCapture(hwnd);   /* the drag may leave the window */
                 InvalidateRect(hwnd, NULL, FALSE);
                 return 0;
@@ -1779,21 +1936,19 @@ static LRESULT CALLBACK overlay_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
 
         /*
-         * Below the strip: begin drawing a region (task 6.5).
+         * Below the strip: the canvas. Nothing is drawn by hand here for now.
          *
-         * SetCapture matters here. Without it, letting go outside the window -
-         * which is easy to do on a full-screen overlay - would leave the drag
-         * stuck on, and the next mouse move anywhere would keep resizing a
-         * rectangle nobody is holding.
+         * Free-hand regions are DISABLED (user, 2026-10-30): "手绘区域在之前
+         * 几次测试中感觉并不好用，先禁用该功能，等后续完善后再启用". The press
+         * only clears the box selection, so a click on empty canvas has a
+         * visible effect (the highlight goes) without starting a drag that
+         * would rewrite the layout.
          */
         if (pt.y >= TOOLBAR_H) {
-            o->drag_active = TRUE;
-            o->drag_origin = pt;
-            o->drag.left   = pt.x;
-            o->drag.top    = pt.y;
-            o->drag.right  = pt.x;
-            o->drag.bottom = pt.y;
-            (void)SetCapture(hwnd);
+            if (o->ph_selected != -1) {
+                o->ph_selected = -1;
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
             return 0;
         }
 
@@ -1839,36 +1994,10 @@ static LRESULT CALLBACK overlay_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         pt.y = (int)(short)HIWORD(lp);
 
         /*
-         * A placeholder drag, first: it owns the pointer until the button comes
-         * up, exactly like the sidebar's item drag.
-         *
-         * Only a REAL change is reported. A press and release that moved
-         * nothing is a click, and a click on a box is not an edit - reporting
-         * it would rewrite the config file for a gesture the user did not make.
+         * Dragging the scrollbar thumb: settle on the pointer, then let go.
+         * This runs BEFORE the placeholder drag below, and it returns: a
+         * scrollbar drag is not a box drag that happens to start on the panel.
          */
-        if (o->ph_drag >= 0) {
-            const int  idx   = o->ph_drag;
-            const RECT final = o->ph_now;
-
-            o->ph_drag = -1;
-            (void)ReleaseCapture();
-
-            if (final.left != o->ph_start.left || final.top    != o->ph_start.top ||
-                final.right != o->ph_start.right || final.bottom != o->ph_start.bottom) {
-                RelRect zone;
-                if (placeholder_zone_from_rect(&final, &o->sb_area, &zone) &&
-                    o->slot_src.slot_moved != NULL) {
-                    log_info(L"overlay: box %d -> %.4f,%.4f %.4fx%.4f", idx,
-                             zone.x, zone.y, zone.w, zone.h);
-                    o->slot_src.slot_moved(o->slot_src.ctx, idx, &zone);
-                }
-            }
-
-            InvalidateRect(hwnd, NULL, FALSE);
-            return 0;
-        }
-
-        /* Dragging the scrollbar thumb: follow the pointer, then let go. */
         if (o->sb_scroll_drag) {
             if (sidebar_enabled(o)) {
                 RECT track, thumb;
@@ -1881,10 +2010,63 @@ static LRESULT CALLBACK overlay_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                                                   total, visible, pt.y),
                         total, visible);
                 }
+                sidebar_invalidate(o);
             }
             o->sb_scroll_drag = FALSE;
             (void)ReleaseCapture();
-            sidebar_invalidate(o);
+            return 0;
+        }
+
+        /*
+         * A placeholder drag, first: it owns the pointer until the button comes
+         * up, exactly like the sidebar's item drag.
+         *
+         * Only a REAL change is reported. A press and release that moved
+         * nothing is a click, and a click on a box is not an edit - reporting
+         * it would rewrite the config file for a gesture the user did not make.
+         */
+        if (o->ph_drag >= 0) {
+            const int  idx   = o->ph_drag;
+            const int  snap  = o->ph_snap;
+
+            o->ph_drag = -1;
+            o->ph_snap = -1;
+            (void)ReleaseCapture();
+
+            /*
+             * Released over a screen edge with a layout region in reach: the
+             * box takes that region's place and size. The drag is over at this
+             * point, so nothing follows the pointer afterwards.
+             */
+            if (snap >= 0 && snap < o->region_count) {
+                RECT canvas;
+                canvas_area(o, &canvas);
+                if (placeholder_rect(&o->regions[snap], &canvas, &o->ph_now)) {
+                    /* Remember the shape to come back to: the NEXT drag of
+                     * this box starts from this, not from the region. */
+                    o->ph_pre_snap = o->ph_start;
+                    o->ph_snapped  = idx;
+                    log_info(L"overlay: box %d filled into region %d", idx, snap);
+                }
+            }
+
+            const RECT final = o->ph_now;
+
+            if (final.left != o->ph_start.left || final.top    != o->ph_start.top ||
+                final.right != o->ph_start.right || final.bottom != o->ph_start.bottom) {
+                RECT canvas;
+                canvas_area(o, &canvas);
+
+                RelRect zone;
+                if (placeholder_zone_from_rect(&final, &canvas, &zone) &&
+                    o->slot_src.slot_moved != NULL) {
+                    log_info(L"overlay: box %d -> %.4f,%.4f %.4fx%.4f", idx,
+                             zone.x, zone.y, zone.w, zone.h);
+                    o->slot_src.slot_moved(o->slot_src.ctx, idx, &zone);
+                }
+            }
+
+            InvalidateRect(hwnd, NULL, FALSE);
             return 0;
         }
 
@@ -1970,8 +2152,7 @@ static LRESULT CALLBACK overlay_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                  * selected before: drawing one is how the user says so. */
                 o->tpl = SNAP_CUSTOM;
 
-                snapgrid_collect_lines(o->regions, o->region_count, w, h,
-                                       &o->lines);
+                collect_lines(o);
 
                 log_info(L"overlay: region %d drawn %dx%d at %ld,%ld",
                          o->region_count, dw, dh,
@@ -2106,6 +2287,17 @@ static LRESULT CALLBACK overlay_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_KEYDOWN:
         if (o == NULL) break;
 
+        /* Delete removes the selected box. The overlay only reports which one;
+         * main.c decides what that means for the workspace. */
+        if (wp == VK_DELETE) {
+            if (o->ph_selected >= 0 && o->slot_src.deleted != NULL) {
+                const int idx = o->ph_selected;
+                o->ph_selected = -1;
+                o->slot_src.deleted(o->slot_src.ctx, idx);
+            }
+            return 0;
+        }
+
         /* Esc, and Ctrl+Q for the muscle memory of anyone who closes things
          * that way. Both are checked here rather than registered as hotkeys:
          * a global Esc would swallow the key for every other program on the
@@ -2223,7 +2415,7 @@ static void layout_panel_open(Overlay *o)
     if (!found) return;
 
     int want_w = 0, want_h = 0;
-    toolbar_panel_size(SNAP_COUNT, &want_w, &want_h);
+    toolbar_panel_size(SNAP_PANEL_COUNT, &want_w, &want_h);
 
     /* The overlay's own rectangle is the screen it covers, and its client
      * origin is (0,0), so this is the screen in the same coordinates as the
@@ -2263,8 +2455,8 @@ static void layout_panel_click(Overlay *o, POINT pt)
 {
     if (o == NULL) return;
 
-    const int item = toolbar_panel_hit(&o->popup.panel, SNAP_COUNT, pt);
-    if (item < 0 || item >= (int)SNAP_COUNT) return;
+    const int item = toolbar_panel_hit(&o->popup.panel, SNAP_PANEL_COUNT, pt);
+    if (item < 0 || item >= (int)SNAP_PANEL_COUNT) return;
 
     /*
      * The panel lists the templates in SnapTemplate order, so the item index IS
@@ -2292,10 +2484,10 @@ static void draw_layout_panel(Overlay *o, const RECT *panel)
     HFONT old_font = (HFONT)SelectObject(o->mem_dc, o->font_small);
     SetBkMode(o->mem_dc, TRANSPARENT);
 
-    for (int i = 0; i < (int)SNAP_COUNT; ++i) {
+    for (int i = 0; i < (int)SNAP_PANEL_COUNT; ++i) {
         RECT item, thumb;
-        if (!toolbar_panel_item_rect(panel, (int)SNAP_COUNT, i, &item)) continue;
-        if (!toolbar_panel_thumb_rect(panel, (int)SNAP_COUNT, i, &thumb)) continue;
+        if (!toolbar_panel_item_rect(panel, (int)SNAP_PANEL_COUNT, i, &item)) continue;
+        if (!toolbar_panel_thumb_rect(panel, (int)SNAP_PANEL_COUNT, i, &thumb)) continue;
 
         const BOOL hot = (i == o->panel_hover);
 
@@ -2586,40 +2778,82 @@ static void sb_apply_filter(Overlay *o)
         o->sb_filter = NULL;
     }
     o->sb_filter_count = 0;
+    o->sb_pathless_count = 0;
 
     const int total = sidebar_enabled(o) ? o->sb_src.count : 0;
 
-    /* The scroll position described the OLD list. Start the new one at the top
-     * rather than leaving the panel in the middle of a list nobody has seen. */
-    sidebar_scroll_to(&o->sidebar, 0, total,
+    /* Keep the scroll position: expanding or collapsing the pathless group
+     * must not throw the list back to the top - the row the user just clicked
+     * is still the row they are looking at. The search box resets it, in
+     * filter_edit_changed(), where the list genuinely starts over. */
+    sidebar_scroll_to(&o->sidebar, sidebar_scroll(&o->sidebar), total,
                       sidebar_visible_rows(&o->sb_metrics, &o->sb_area));
 
-    if (total <= 0 || o->sb_filter_text[0] == L'\0') return;
+    if (total <= 0) return;
 
-    int *map = (int *)calloc((size_t)total, sizeof(int));
+    /* One slot for the group header, and one more because the index can be
+     * updated by its worker between the two passes below (measured: 221 + 96
+     * against a total of 316) - a stale count must never write past the end. */
+    int *map = (int *)calloc((size_t)total + 2, sizeof(int));
     if (map == NULL) {
         /* Said, not hidden: the box would otherwise look broken - the text is
          * there and nothing is being filtered. */
-        log_info(L"overlay: no memory for the search filter - showing everything");
+        log_info(L"overlay: no memory for the sidebar filter - showing everything");
         return;
     }
 
     int n = 0;
-    for (int i = 0; i < total; ++i) {
-        const wchar_t *name = o->sb_src.name_at(o->sb_src.ctx, i);
-        if (sidebar_matches(name, o->sb_filter_text)) map[n++] = i;
+
+    if (o->sb_filter_text[0] != L'\0') {
+        /* Searching sees everything, pathless rows included: a user typing a
+         * name wants the name, not a rule about launchability. */
+        for (int i = 0; i < total; ++i) {
+            const wchar_t *name = o->sb_src.name_at(o->sb_src.ctx, i);
+            if (sidebar_matches(name, o->sb_filter_text)) map[n++] = i;
+        }
+    } else {
+        /*
+         * No search: launchable rows first, then ONE collapsible row for the
+         * programs with no launch path. They cannot be started, so dragging one
+         * onto the canvas would create a preset that never matches - and on
+         * this machine they are a third of the list, which buries the rows that
+         * can actually be started.
+         */
+        for (int i = 0; i < total; ++i) {
+            const wchar_t *path = o->sb_src.path_at(o->sb_src.ctx, i);
+            if (path != NULL && path[0] != L'\0') map[n++] = i;
+        }
+
+        int pathless = 0;
+        for (int i = 0; i < total; ++i) {
+            const wchar_t *path = o->sb_src.path_at(o->sb_src.ctx, i);
+            if (path == NULL || path[0] == L'\0') pathless++;
+        }
+
+        if (pathless > 0) {
+            o->sb_pathless_count = pathless;
+            map[n++] = -1;   /* the group header */
+
+            if (o->sb_show_pathless) {
+                for (int i = 0; i < total; ++i) {
+                    const wchar_t *path = o->sb_src.path_at(o->sb_src.ctx, i);
+                    if (path == NULL || path[0] == L'\0') map[n++] = i;
+                }
+            }
+        }
     }
 
     /*
-     * "Nothing matched" is NOT "no filter": the array is kept even when it is
-     * empty, so the panel shows an empty result rather than falling back to all
-     * 343 rows - which would look like the search box did nothing.
+     * An empty result is NOT "no filter": the array is kept even when it is
+     * empty, so the panel shows an empty result rather than falling back to
+     * everything - which would look like the search box did nothing.
      */
     o->sb_filter       = map;
     o->sb_filter_count = n;
 
-    log_info(L"sidebar: filter \"%ls\" matches %d of %d",
-             o->sb_filter_text, n, total);
+    log_info(L"sidebar: %d of %d row(s) shown (%d without a launch path, %ls)",
+             n, total, o->sb_pathless_count,
+             o->sb_show_pathless ? L"expanded" : L"collapsed");
 }
 
 /*
@@ -2636,6 +2870,67 @@ static void sidebar_layout(Overlay *o)
     o->sb_area.top    = TOOLBAR_H;
     o->sb_area.right  = o->rect.right - o->rect.left;
     o->sb_area.bottom = o->rect.bottom - o->rect.top;
+}
+
+/*
+ * The whole screen, for the placeholder boxes.
+ *
+ * They are NOT laid out in sb_area: a preset's zone is normalized against the
+ * monitor (rule_target_rect() reads it the same way), so a box at y=0 has to
+ * sit at the very top of the screen rather than below the strip. The strip
+ * gives way to it instead - see bar_solid in render().
+ */
+static void canvas_area(const Overlay *o, RECT *out)
+{
+    out->left   = 0;
+    out->top    = 0;
+    out->right  = o->rect.right - o->rect.left;
+    out->bottom = o->rect.bottom - o->rect.top;
+}
+
+/*
+ * Where the taskbar's top edge is, in physical pixels; 0 when there is no
+ * horizontal line to draw.
+ *
+ * Read, never assumed. A taskbar that auto-hides still reports a position, and
+ * a taskbar on a side edge gives a vertical line this canvas cannot use as a
+ * bottom guide.
+ */
+static int taskbar_line_y(void)
+{
+    APPBARDATA abd;
+    ZeroMemory(&abd, sizeof(abd));
+    abd.cbSize = sizeof(abd);
+
+    if (!SHAppBarMessage(ABM_GETTASKBARPOS, &abd)) return 0;
+    if (abd.uEdge != ABE_BOTTOM) return 0;
+    return (int)abd.rc.top;
+}
+
+/*
+ * The lines a placeholder snaps to: the screen edges, the current template's
+ * edges, and the taskbar guide while it is on.
+ */
+static void collect_lines(Overlay *o)
+{
+    const int w = (int)(o->rect.right - o->rect.left);
+    const int h = (int)(o->rect.bottom - o->rect.top);
+
+    snapgrid_collect_lines(o->regions, o->region_count, w, h, &o->lines);
+
+    if (o->guide_on && o->taskbar_y > 0 && o->lines.count_y < SNAP_MAX_LINES) {
+        o->lines.y[o->lines.count_y++] = o->taskbar_y;
+    }
+}
+
+void overlay_set_taskbar_guide(Overlay *o, BOOL on)
+{
+    if (o == NULL) return;
+
+    o->guide_on = on;
+    collect_lines(o);
+
+    if (o->hwnd != NULL) InvalidateRect(o->hwnd, NULL, FALSE);
 }
 
 /*
@@ -2922,10 +3217,24 @@ static void draw_sidebar(Overlay *o)
                 /* `row` is a VISIBLE row: with a filter on, the source row
                  * behind it is a different number. */
                 const int src = sb_row_at(o, row);
-                if (src >= 0) {
-                    name = o->sb_src.name_at(o->sb_src.ctx, src);
-                    path = o->sb_src.path_at(o->sb_src.ctx, src);
+                if (src < 0) {
+                    /* The collapsible group header for rows with no launch path. */
+                    wchar_t group_line[160];
+                    _snwprintf_s(group_line, 160, _TRUNCATE,
+                                 i18n_text(STR_SIDEBAR_PATHLESS_FMT),
+                                 o->sb_show_pathless ? L"[-]" : L"[+]",
+                                 o->sb_pathless_count);
+
+                    SetTextColor(o->mem_dc, RGB(170, 185, 210));
+                    RECT hr = rr;
+                    hr.left  += m->pad;
+                    hr.right -= m->pad;
+                    DrawTextW(o->mem_dc, group_line, -1, &hr,
+                              DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_NOPREFIX);
+                    continue;
                 }
+                name = o->sb_src.name_at(o->sb_src.ctx, src);
+                path = o->sb_src.path_at(o->sb_src.ctx, src);
             }
             if (name == NULL) name = L"";
             const BOOL can = (path != NULL && path[0] != L'\0');
@@ -3024,15 +3333,18 @@ static void draw_sidebar_drag(Overlay *o)
     /* Over the canvas only: over the panel itself, or the strip, there is
      * nothing to drop onto and promising otherwise would be a lie. */
     if (hit.kind == SIDEBAR_HIT_NONE && pt.y >= TOOLBAR_H) {
+        RECT canvas;
+        canvas_area(o, &canvas);
+
         RelRect zone;
-        if (sidebar_drop_zone(&o->sb_area, pt, SIDEBAR_DROP_W, SIDEBAR_DROP_H,
+        if (sidebar_drop_zone(&canvas, pt, SIDEBAR_DROP_W, SIDEBAR_DROP_H,
                               &zone)) {
-            const int w = o->sb_area.right - o->sb_area.left;
-            const int h = o->sb_area.bottom - o->sb_area.top;
+            const int w = canvas.right - canvas.left;
+            const int h = canvas.bottom - canvas.top;
 
             RECT zr;
-            zr.left   = o->sb_area.left + (LONG)(zone.x * (float)w);
-            zr.top    = o->sb_area.top  + (LONG)(zone.y * (float)h);
+            zr.left   = canvas.left + (LONG)(zone.x * (float)w);
+            zr.top    = canvas.top  + (LONG)(zone.y * (float)h);
             zr.right  = zr.left + (LONG)(zone.w * (float)w);
             zr.bottom = zr.top  + (LONG)(zone.h * (float)h);
 
@@ -3085,6 +3397,35 @@ static void draw_sidebar_drag(Overlay *o)
 /* ------------------------------------------------------------------ */
 
 /*
+ * The region a dragged box would take if the button came up now.
+ *
+ * Drawn under the boxes: it is a preview of the target, not a new object. The
+ * fill is semi-transparent and the outline bright, so it reads as "this one"
+ * without hiding the boxes on top of it.
+ */
+static void draw_snap_preview(Overlay *o)
+{
+    if (o == NULL || o->ph_snap < 0 || o->ph_snap >= o->region_count) return;
+
+    RECT canvas;
+    canvas_area(o, &canvas);
+
+    RECT r;
+    if (!placeholder_rect(&o->regions[o->ph_snap], &canvas, &r)) return;
+
+    blend_rect(o, &r, RGB(96, 168, 255), 30);
+
+    HPEN   old_pen = (HPEN)SelectObject(o->mem_dc, GetStockObject(DC_PEN));
+    HBRUSH old_pin = (HBRUSH)SelectObject(o->mem_dc, GetStockObject(NULL_BRUSH));
+
+    SetDCPenColor(o->mem_dc, RGB(170, 220, 255));
+    Rectangle(o->mem_dc, r.left, r.top, r.right, r.bottom);
+
+    (void)SelectObject(o->mem_dc, old_pen);
+    (void)SelectObject(o->mem_dc, old_pin);
+}
+
+/*
  * One box per preset this workspace is meant to place, with its icon, its name
  * and its size (acceptance items 8 and 9).
  *
@@ -3109,12 +3450,15 @@ static void draw_placeholders(Overlay *o)
     HFONT old_font = (HFONT)SelectObject(o->mem_dc, o->font_small);
     SetBkMode(o->mem_dc, TRANSPARENT);
 
+    RECT canvas;
+    canvas_area(o, &canvas);
+
     for (int i = 0; i < total && o->ph_count < PLACEHOLDER_MAX_SHOWN; ++i) {
         const OverlaySlot *s = o->slot_src.slot_at(o->slot_src.ctx, i);
         if (s == NULL) continue;
 
         RECT box;
-        if (!placeholder_rect(&s->zone, &o->sb_area, &box)) continue;
+        if (!placeholder_rect(&s->zone, &canvas, &box)) continue;
 
         /* A box being dragged is drawn where the pointer has taken it - the
          * stored zone is only updated when the button comes back up. */
@@ -3126,10 +3470,12 @@ static void draw_placeholders(Overlay *o)
         const BOOL hot = (is_drag || o->ph_hover == i) ? TRUE : FALSE;
         o->ph_boxes[o->ph_count++] = box;
 
-        SetDCBrushColor(o->mem_dc, hot ? RGB(36, 66, 98) : RGB(26, 48, 74));
+        const BOOL sel = (o->ph_selected == i) ? TRUE : FALSE;
+
+        SetDCBrushColor(o->mem_dc, sel ? RGB(44, 82, 116) : (hot ? RGB(36, 66, 98) : RGB(26, 48, 74)));
         FillRect(o->mem_dc, &box, (HBRUSH)GetStockObject(DC_BRUSH));
 
-        SetDCPenColor(o->mem_dc, hot ? RGB(190, 245, 215) : RGB(120, 200, 160));
+        SetDCPenColor(o->mem_dc, sel ? RGB(255, 214, 102) : (hot ? RGB(190, 245, 215) : RGB(120, 200, 160)));
         SelectObject(o->mem_dc, GetStockObject(DC_PEN));
         SelectObject(o->mem_dc, GetStockObject(NULL_BRUSH));
         Rectangle(o->mem_dc, box.left, box.top, box.right, box.bottom);
@@ -3143,9 +3489,27 @@ static void draw_placeholders(Overlay *o)
             FillRect(o->mem_dc, &grip, (HBRUSH)GetStockObject(DC_BRUSH));
         }
 
+        /* The delete button: the reliable way to remove a box, since the
+         * overlay never takes focus and Delete never arrives. Same rule as the
+         * grip - only the box the user is pointing at or has selected. */
+        if (hot || sel) {
+            RECT cr;
+            if (placeholder_close_rect(pm, &box, TOOLBAR_H, &cr)) {
+                SetDCBrushColor(o->mem_dc, RGB(110, 38, 46));
+                FillRect(o->mem_dc, &cr, (HBRUSH)GetStockObject(DC_BRUSH));
+
+                SetDCPenColor(o->mem_dc, RGB(255, 196, 196));
+                SelectObject(o->mem_dc, GetStockObject(DC_PEN));
+                MoveToEx(o->mem_dc, cr.left + 3, cr.top + 3, NULL);
+                LineTo(o->mem_dc, cr.right - 3, cr.bottom - 3);
+                MoveToEx(o->mem_dc, cr.right - 3, cr.top + 3, NULL);
+                LineTo(o->mem_dc, cr.left + 3, cr.bottom - 3);
+            }
+        }
+
         RECT ir;
         if (s->path[0] != L'\0' && o->icons != NULL &&
-            placeholder_icon_rect(pm, &box, &ir)) {
+            placeholder_icon_rect(pm, &box, TOOLBAR_H, &ir)) {
             HICON ic = iconcache_get(o->icons, s->path);
             if (ic != NULL) {
                 (void)DrawIconEx(o->mem_dc, ir.left, ir.top, ic,
@@ -3155,7 +3519,7 @@ static void draw_placeholders(Overlay *o)
         }
 
         RECT nr;
-        if (placeholder_name_rect(pm, &box, &nr)) {
+        if (placeholder_name_rect(pm, &box, TOOLBAR_H, &nr)) {
             SetTextColor(o->mem_dc, RGB(228, 245, 236));
             DrawTextW(o->mem_dc, s->name, -1, &nr,
                       DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS |
@@ -3163,7 +3527,7 @@ static void draw_placeholders(Overlay *o)
         }
 
         RECT sr;
-        if (placeholder_size_rect(pm, &box, &sr)) {
+        if (placeholder_size_rect(pm, &box, TOOLBAR_H, &sr)) {
             /* Taken from the BOX, not from the stored zone: while a drag is in
              * progress this is the only place the new size is visible, and it
              * is the feedback that makes resizing a box mean anything. */
@@ -3199,16 +3563,37 @@ static void draw_placeholders(Overlay *o)
     }
 
     /* An empty workspace and a broken one look identical on a blank canvas. */
+    o->empty_hint_valid = FALSE;
     if (total == 0) {
-        SetTextColor(o->mem_dc, RGB(190, 210, 200));
+        const wchar_t *empty = i18n_text(STR_PLACEHOLDER_EMPTY);
+        SIZE esz;
+        ZeroMemory(&esz, sizeof(esz));
+        GetTextExtentPoint32W(o->mem_dc, empty, (int)wcslen(empty), &esz);
+
         RECT t = o->sb_area;
         t.left  += 24;
         t.right -= 24;
         t.top    = TOOLBAR_H + 56;
-        t.bottom = t.top + 28;
-        DrawTextW(o->mem_dc, i18n_text(STR_PLACEHOLDER_EMPTY), -1, &t,
+        t.bottom = t.top + 40;
+
+        /* A solid strip behind the text: the canvas is translucent, and text
+         * laid straight over a desktop window is text nobody can read. */
+        RECT bg = t;
+        bg.right  = bg.left + esz.cx + 24;
+        bg.left  -= 8;
+        bg.top   -= 4;
+        bg.bottom = bg.top + esz.cy + 8;
+
+        SetDCBrushColor(o->mem_dc, RGB(14, 26, 44));
+        FillRect(o->mem_dc, &bg, (HBRUSH)GetStockObject(DC_BRUSH));
+
+        SetTextColor(o->mem_dc, RGB(210, 225, 215));
+        DrawTextW(o->mem_dc, empty, -1, &bg,
                   DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS |
                   DT_NOPREFIX);
+
+        o->empty_hint = bg;
+        o->empty_hint_valid = TRUE;
     }
 
     SelectObject(o->mem_dc, old_font);
@@ -3487,6 +3872,12 @@ static void filter_edit_changed(Overlay *o)
     if (wcscmp(buf, o->sb_filter_text) == 0) return;
 
     wcsncpy_s(o->sb_filter_text, OVERLAY_FILTER_MAX, buf, _TRUNCATE);
+
+    /* A new query starts a new list: top of it. */
+    sidebar_scroll_to(&o->sidebar, 0,
+                      sidebar_enabled(o) ? o->sb_src.count : 0,
+                      sidebar_visible_rows(&o->sb_metrics, &o->sb_area));
+
     sb_apply_filter(o);
     sidebar_invalidate(o);
 }
@@ -3694,6 +4085,11 @@ Overlay *overlay_create(HINSTANCE hinst, int monitor_index,
      */
     o->ph_hover = -1;
     o->ph_drag  = -1;
+    o->ph_snap  = -1;
+    o->ph_snapped = -1;
+    o->ph_selected = -1;
+    o->sb_show_pathless = FALSE;
+    o->sb_pathless_count = 0;
 
     /*
      * The icon cache, at the size the sidebar draws icons at on this screen.
@@ -3749,10 +4145,12 @@ Overlay *overlay_create(HINSTANCE hinst, int monitor_index,
     o->tpl          = SNAP_CUSTOM;
     o->region_count = 0;
     o->drag_active  = FALSE;
-    snapgrid_collect_lines(o->regions, o->region_count,
-                           (int)(mon.right - mon.left),
-                           (int)(mon.bottom - mon.top),
-                           &o->lines);
+
+    /* The taskbar guide is read before the lines are collected, so the first
+     * collection already includes it. */
+    o->taskbar_y = taskbar_line_y();
+    o->guide_on  = TRUE;
+    collect_lines(o);
 
     /* The monitor box needs the toolbar and the name box to know what room is
      * left in the middle of the strip, so it comes after both of them. */
@@ -3926,7 +4324,8 @@ BOOL overlay_move_to_monitor(Overlay *o, int monitor_index)
         o->region_count = snapgrid_build(o->tpl, SNAP_GAP_DEFAULT_PX, w, h,
                                          o->regions, SNAP_MAX_REGIONS);
     }
-    snapgrid_collect_lines(o->regions, o->region_count, w, h, &o->lines);
+    o->taskbar_y = taskbar_line_y();   /* the taskbar may be on this screen now */
+    collect_lines(o);
 
     /* The box now names a different screen, and the new one may be a different
      * width - so its geometry is recomputed as well. */
@@ -4225,6 +4624,9 @@ void overlay_set_slots(Overlay *o, const OverlaySlotSource *src)
     /* The list just changed, so an index held from the previous one may point
      * at a different box. Let go of it rather than editing the wrong preset. */
     o->ph_drag  = -1;
+    o->ph_snap  = -1;
+    o->ph_snapped = -1;
+    o->ph_selected = -1;
     o->ph_hover = -1;
     o->ph_count = 0;
     o->ph_short_reported = FALSE;

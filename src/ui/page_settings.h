@@ -58,6 +58,16 @@ typedef struct {
      * such key reads as 1.
      */
     BOOL watch_windows;
+
+    /*
+     * Draw the taskbar guide line in edit mode and let the bottom edge of a
+     * box snap to it.
+     *
+     * On by default: most machines show the taskbar, and a layout that ignores
+     * it puts the window's bottom edge under it. Stored as 0/1; an older file
+     * with no such key reads as 1.
+     */
+    BOOL taskbar_guide;
 } Settings;
 
 /* Fill *out with the built-in defaults. */
@@ -110,6 +120,7 @@ void settings_to_store(const Settings *s, void *doc);
 #define IDC_SETTINGS_HOOK          1093
 #define IDC_SETTINGS_HOOK_NOTE     1094
 #define IDC_SETTINGS_GUIDE         1095
+#define IDC_SETTINGS_TASKBAR       1098
 #define IDC_SETTINGS_APPLY         1096
 #define IDC_SETTINGS_CANCEL        1097
 

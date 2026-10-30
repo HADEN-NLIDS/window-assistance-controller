@@ -83,6 +83,12 @@ void edit_set_slots(const OverlaySlotSource *src)
     overlay_set_slots(g_edit.overlay, src);
 }
 
+void edit_set_taskbar_guide(BOOL on)
+{
+    if (!g_edit.active || g_edit.overlay == NULL) return;
+    overlay_set_taskbar_guide(g_edit.overlay, on);
+}
+
 BOOL edit_enter(HINSTANCE hinst, int monitor_index, int fuse_seconds)
 {
     if (g_edit.active) {

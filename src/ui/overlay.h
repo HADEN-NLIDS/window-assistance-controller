@@ -250,6 +250,15 @@ typedef struct {
      * ran at all).
      */
     void (*pick)(void *ctx);
+
+    /*
+     * The user asked to remove box `index` (Delete while it is selected).
+     *
+     * The overlay only says WHICH box; whether that means "take it out of this
+     * workspace" or something else is the caller's decision, the same division
+     * slot_moved() follows. NULL leaves Delete doing nothing.
+     */
+    void (*deleted)(void *ctx, int index);
 } OverlaySlotSource;
 
 /*
@@ -261,6 +270,15 @@ typedef struct {
  * slot_at is NULL, removes the boxes.
  */
 void overlay_set_slots(Overlay *o, const OverlaySlotSource *src);
+
+/*
+ * Draw the taskbar guide line and let placeholders snap to it.
+ *
+ * The taskbar's position is read when the overlay is created and again when it
+ * moves to another monitor; this only turns the guide on or off - it is the
+ * settings page's switch.
+ */
+void overlay_set_taskbar_guide(Overlay *o, BOOL on);
 
 /*
  * Create the overlay on `monitor_index`.

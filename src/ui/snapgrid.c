@@ -49,6 +49,40 @@ int snapgrid_build(SnapTemplate tpl, int gap_px,
     case SNAP_THIRDS: cols = 3; rows = 1; break;
     case SNAP_2X2:    cols = 2; rows = 2; break;
     case SNAP_3X3:    cols = 3; rows = 3; break;
+
+    /*
+     * 1+2 and 2+1 are a 2x2 grid with one column merged: two regions on one
+     * side, one on the other. They are the two arrangements a three-window
+     * desk keeps coming back to, and neither is a uniform grid, which is why
+     * they cannot be expressed by cols/rows alone.
+     */
+    case SNAP_ONE_TWO:
+    case SNAP_TWO_ONE: {
+        if (cap < 3) return 0;
+        if (gap_px * 1 >= screen_w || gap_px * 1 >= screen_h) gap_px = 0;
+
+        RelRect c[4];
+        grid_cell(&c[0], 0, 0, 2, 2, gap_px, screen_w, screen_h);
+        grid_cell(&c[1], 1, 0, 2, 2, gap_px, screen_w, screen_h);
+        grid_cell(&c[2], 0, 1, 2, 2, gap_px, screen_w, screen_h);
+        grid_cell(&c[3], 1, 1, 2, 2, gap_px, screen_w, screen_h);
+
+        if (tpl == SNAP_ONE_TWO) {
+            /* one full-height column on the left, two regions on the right */
+            out[0] = c[0];
+            out[0].h = (c[2].y + c[2].h) - c[0].y;
+            out[1] = c[1];
+            out[2] = c[3];
+        } else {
+            /* two regions on the left, one full-height column on the right */
+            out[0] = c[0];
+            out[1] = c[2];
+            out[2] = c[1];
+            out[2].h = (c[3].y + c[3].h) - c[1].y;
+        }
+        return 3;
+    }
+
     case SNAP_CUSTOM:
     default:
         /* Custom regions are the user's to draw (task 6.5). Inventing a
@@ -85,6 +119,8 @@ const wchar_t *snapgrid_name(SnapTemplate tpl)
     switch (tpl) {
     case SNAP_HALVES: return L"halves";
     case SNAP_THIRDS: return L"thirds";
+    case SNAP_ONE_TWO: return L"1+2";
+    case SNAP_TWO_ONE: return L"2+1";
     case SNAP_2X2:    return L"2x2";
     case SNAP_3X3:    return L"3x3";
     case SNAP_CUSTOM: return L"custom";
@@ -98,6 +134,8 @@ StrId snapgrid_label_id(SnapTemplate tpl)
     switch (tpl) {
     case SNAP_HALVES: return STR_TB_TPL_HALVES;
     case SNAP_THIRDS: return STR_TB_TPL_THIRDS;
+    case SNAP_ONE_TWO: return STR_TB_TPL_1P2;
+    case SNAP_TWO_ONE: return STR_TB_TPL_2P1;
     case SNAP_2X2:    return STR_TB_TPL_2X2;
     case SNAP_3X3:    return STR_TB_TPL_3X3;
     case SNAP_CUSTOM: return STR_TB_CUSTOM;
@@ -198,4 +236,75 @@ void snapgrid_snap_rect(RECT *r, const SnapLines *lines, int threshold_px)
     r->right  = snap_value((int)r->right,  lines->x, lines->count_x, threshold_px);
     r->top    = snap_value((int)r->top,    lines->y, lines->count_y, threshold_px);
     r->bottom = snap_value((int)r->bottom, lines->y, lines->count_y, threshold_px);
+}
+
+/* ------------------------------------------------------------------ */
+/* Filling a dragged box into the nearest region (task 7.3)            */
+/* ------------------------------------------------------------------ */
+
+BOOL snapgrid_edge_hit(int screen_w, int screen_h, POINT pt, int band_px)
+{
+    if (screen_w <= 0 || screen_h <= 0) {
+        return FALSE;
+    }
+    if (band_px < 0) {
+        band_px = 0;
+    }
+
+    /* Outside the screen is not "at its edge": this is the point the user was
+     * aiming with, and a point that left the desktop is a different move. */
+    if (pt.x < 0 || pt.x >= screen_w || pt.y < 0 || pt.y >= screen_h) {
+        return FALSE;
+    }
+
+    if (pt.x < band_px || pt.x >= screen_w - band_px) return TRUE;
+    if (pt.y < band_px || pt.y >= screen_h - band_px) return TRUE;
+    return FALSE;
+}
+
+int snapgrid_pick(const RelRect *regions, int count,
+                  int screen_w, int screen_h, POINT pt, float max_frac)
+{
+    if (regions == NULL || count <= 0 || screen_w <= 0 || screen_h <= 0) {
+        return -1;
+    }
+    if (max_frac < 0.0f) {
+        max_frac = 0.0f;
+    }
+
+    const float  shorter = (float)((screen_w < screen_h) ? screen_w : screen_h);
+    const double limit   = (double)max_frac * (double)shorter;
+    const double limit2  = limit * limit;
+
+    int    best   = -1;
+    double best2  = 0.0;
+
+    for (int i = 0; i < count; ++i) {
+        const int l = (int)(regions[i].x * (float)screen_w);
+        const int t = (int)(regions[i].y * (float)screen_h);
+        const int r = (int)((regions[i].x + regions[i].w) * (float)screen_w);
+        const int b = (int)((regions[i].y + regions[i].h) * (float)screen_h);
+
+        int dx = 0;
+        int dy = 0;
+        if (pt.x < l)        dx = l - pt.x;
+        else if (pt.x >= r)  dx = pt.x - (r - 1);
+        if (pt.y < t)        dy = t - pt.y;
+        else if (pt.y >= b)  dy = pt.y - (b - 1);
+
+        const double d2 = (double)dx * (double)dx + (double)dy * (double)dy;
+        if (best < 0 || d2 < best2) {
+            best  = i;
+            best2 = d2;
+        }
+        /* Inside a region: nothing can be closer. */
+        if (d2 == 0.0) {
+            break;
+        }
+    }
+
+    if (best < 0) {
+        return -1;
+    }
+    return (best2 <= limit2) ? best : -1;
 }

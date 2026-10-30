@@ -43,6 +43,8 @@ extern "C" {
 typedef enum {
     SNAP_HALVES = 0,   /* two columns            */
     SNAP_THIRDS,       /* three columns          */
+    SNAP_ONE_TWO,      /* 1+2: left full height, right split top/bottom  */
+    SNAP_TWO_ONE,      /* 2+1: left split top/bottom, right full height  */
     SNAP_2X2,          /* four quadrants         */
     SNAP_3X3,          /* nine cells             */
     SNAP_CUSTOM,       /* drawn by hand - see 6.5 */
@@ -131,6 +133,52 @@ void snapgrid_snap_rect(RECT *r, const SnapLines *lines, int threshold_px);
  * exactly one place to ask for it.
  */
 StrId snapgrid_label_id(SnapTemplate tpl);
+
+/* ------------------------------------------------------------------ */
+/* Filling a dragged box into the nearest region (task 7.3)            */
+/* ------------------------------------------------------------------ */
+
+/*
+ * How far from a region the pointer may be and still count, as a fraction of
+ * the SHORTER screen side.
+ *
+ * 0.1 was the user's number, with the reason given in their words: layouts
+ * normally have at least one side against a screen edge, so a pointer that
+ * touches an edge is either inside a region or one region-width away from it.
+ */
+#define SNAP_FILL_MAX_FRAC 0.1f
+
+/*
+ * How close to a screen edge the pointer must be for the fill to trigger.
+ *
+ * The user's rule: the edge itself is the trigger, like the system snap. 32 px
+ * is the grab band - wide enough for a hand that means it, narrow enough that
+ * waving over the middle of a region never counts. Measured complaint it
+ * answers: "鼠标在移动到布局框内就会触发吸附" - a pointer merely INSIDE a
+ * region used to pick it, which is not what an edge is.
+ */
+#define SNAP_EDGE_BAND_PX 32
+
+/*
+ * Is `pt` within `band_px` of an edge of the w x h screen?
+ *
+ * Pure. A point outside the screen is never at its edge.
+ */
+BOOL snapgrid_edge_hit(int screen_w, int screen_h, POINT pt, int band_px);
+
+/*
+ * Index of the region nearest to `pt`, or -1 when none is within
+ * `max_frac` x the shorter screen side.
+ *
+ * The distance is measured to the rectangle itself (0 inside), not to its
+ * centre: a wide region's centre can be farther from the pointer than a
+ * narrow neighbour's edge, and "nearest" has to mean what the eye sees.
+ *
+ * Pure: every input is an argument, so the rule can be checked on any machine
+ * without a screen.
+ */
+int snapgrid_pick(const RelRect *regions, int count,
+                  int screen_w, int screen_h, POINT pt, float max_frac);
 
 #ifdef __cplusplus
 }

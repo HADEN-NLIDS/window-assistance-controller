@@ -41,6 +41,7 @@ struct PageSettings {
 
     HWND chk_hook;
     HWND note_hook;
+    HWND chk_taskbar;
 
     HWND btn_guide;
     HWND btn_apply;
@@ -302,6 +303,9 @@ PageSettings *page_settings_create(HWND parent, HINSTANCE hinst, HFONT font,
     p->note_hook = add_ctrl(p, L"STATIC", STR_SETTINGS_HOOK_NOTE,
                             SS_LEFT, 0, IDC_SETTINGS_HOOK_NOTE);
 
+    p->chk_taskbar = add_ctrl(p, L"BUTTON", STR_SETTINGS_TASKBAR,
+                              WS_TABSTOP | BS_AUTOCHECKBOX, 0, IDC_SETTINGS_TASKBAR);
+
     /* ---- actions -------------------------------------------------- */
     p->btn_guide  = add_ctrl(p, L"BUTTON", STR_SETTINGS_GUIDE,
                              WS_TABSTOP | BS_PUSHBUTTON, 0, IDC_SETTINGS_GUIDE);
@@ -340,7 +344,7 @@ void page_settings_show(PageSettings *p, BOOL show)
         p->grp_close, p->rb_ask, p->rb_quit, p->rb_tray,
         p->lbl_hotkey, p->txt_hotkey, p->note_hotkey,
         p->lbl_perm, p->txt_perm, p->note_perm,
-        p->chk_hook, p->note_hook,
+        p->chk_hook, p->note_hook, p->chk_taskbar,
         p->btn_guide, p->btn_apply, p->btn_cancel
     };
 
@@ -403,11 +407,15 @@ void page_settings_layout(PageSettings *p, int x, int top, int width, int bottom
     place(p->note_perm, x + lbl_w, y + row_h, body_w, note_h * 2);
     y = advance(y, row_h + note_h * 2 + gap * 2, limit);
 
-    /* ---- the reserved switch ------------------------------------- */
+    /* ---- the resident listener switch ---------------------------- */
     place(p->chk_hook, x, y, width, box_h);
     place(p->note_hook, x + px(p, 20), y + box_h,
           (width > px(p, 20)) ? (width - px(p, 20)) : width, note_h * 2);
     y = advance(y, box_h + note_h * 2 + gap * 2, limit);
+
+    /* ---- the taskbar guide switch -------------------------------- */
+    place(p->chk_taskbar, x, y, width, box_h);
+    y = advance(y, box_h + gap * 2, limit);
 
     /* ---- guide entry --------------------------------------------- */
     place(p->btn_guide, x, y, px(p, 180), px(p, 28));
@@ -435,6 +443,9 @@ static void sync_controls(PageSettings *p, const Settings *s)
      * button messages rather than a control-specific accessor. */
     (void)SendMessageW(p->chk_hook, BM_SETCHECK,
                        s->watch_windows ? (WPARAM)BST_CHECKED
+                                        : (WPARAM)BST_UNCHECKED, 0);
+    (void)SendMessageW(p->chk_taskbar, BM_SETCHECK,
+                       s->taskbar_guide ? (WPARAM)BST_CHECKED
                                         : (WPARAM)BST_UNCHECKED, 0);
 }
 
@@ -466,6 +477,8 @@ void page_settings_read(const PageSettings *p, Settings *out)
     out->close_action = read_close_action(p);
     out->watch_windows =
         (SendMessageW(p->chk_hook, BM_GETCHECK, 0, 0) == BST_CHECKED) ? TRUE : FALSE;
+    out->taskbar_guide =
+        (SendMessageW(p->chk_taskbar, BM_GETCHECK, 0, 0) == BST_CHECKED) ? TRUE : FALSE;
 }
 
 /* ------------------------------------------------------------------ */
@@ -480,6 +493,8 @@ void settings_defaults(Settings *out)
     out->close_action  = CLOSE_ACTION_ASK;
     /* On by default: this is the feature the program exists for. */
     out->watch_windows = TRUE;
+    /* On by default: most machines show the taskbar. */
+    out->taskbar_guide = TRUE;
     strncpy_s(out->hotkey_label, sizeof(out->hotkey_label), "?", _TRUNCATE);
 }
 
@@ -515,6 +530,9 @@ void settings_from_store(Settings *out, const void *doc)
 
     out->watch_windows =
         (store_get_int(d, "settings", "watch_windows", 1) != 0) ? TRUE : FALSE;
+
+    out->taskbar_guide =
+        (store_get_int(d, "settings", "taskbar_guide", 1) != 0) ? TRUE : FALSE;
 }
 
 void settings_to_store(const Settings *s, void *doc)
@@ -530,4 +548,5 @@ void settings_to_store(const Settings *s, void *doc)
     store_set(d, "settings", "close_action", num);
 
     store_set(d, "settings", "watch_windows", s->watch_windows ? "1" : "0");
+    store_set(d, "settings", "taskbar_guide", s->taskbar_guide ? "1" : "0");
 }

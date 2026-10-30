@@ -171,18 +171,18 @@ static void test_fit(void)
     RECT ir, nr, sr;
 
     ok(L"a half-screen box is worth drawing", placeholder_is_visible(&big));
-    ok(L"the icon fits", placeholder_icon_rect(&m, &big, &ir));
+    ok(L"the icon fits", placeholder_icon_rect(&m, &big, 0, &ir));
     ok_int(L"in the top-left corner, after the padding", ir.left, 8);
     ok_int(L"on the box's top row", ir.top, 72);
     ok_int(L"one icon square", ir.right - ir.left, 20);
 
-    ok(L"the name fits", placeholder_name_rect(&m, &big, &nr));
+    ok(L"the name fits", placeholder_name_rect(&m, &big, 0, &nr));
     ok_int(L"to the right of the icon", nr.left, 36);
     ok_int(L"on the icon's row, so they line up", nr.top, ir.top);
     ok_int(L"and the same height", nr.bottom - nr.top, ir.bottom - ir.top);
     ok_int(L"reaching the right padding", nr.right, 1272);
 
-    ok(L"the size readout fits", placeholder_size_rect(&m, &big, &sr));
+    ok(L"the size readout fits", placeholder_size_rect(&m, &big, 0, &sr));
     ok_int(L"under the icon", sr.top, 94);
     ok_int(L"as wide as the box's padding allows", sr.right, 1272);
     ok_int(L"one line tall", sr.bottom - sr.top, 20);
@@ -200,22 +200,52 @@ static void test_fit(void)
      * the size over its own border. */
     const RECT squat = r4(0, 0, 200, 48);
     ok(L"a squat box is still drawn", placeholder_is_visible(&squat));
-    ok(L"its name fits", placeholder_name_rect(&m, &squat, &nr));
-    ok(L"its readout fits too", placeholder_size_rect(&m, &squat, &sr));
+    ok(L"its name fits", placeholder_name_rect(&m, &squat, 0, &nr));
+    ok(L"its readout fits too", placeholder_size_rect(&m, &squat, 0, &sr));
     ok_int(L"but is trimmed at the bottom", sr.bottom, 40);
     ok(L"and is still not empty", sr.bottom > sr.top);
 
     /* Too short for even the icon: nothing is claimed to fit. */
     const RECT sliver = r4(0, 0, 200, 20);
-    ok(L"a 20-px-tall box draws nothing", !placeholder_icon_rect(&m, &sliver, &ir));
+    ok(L"a 20-px-tall box draws nothing", !placeholder_icon_rect(&m, &sliver, 0, &ir));
 
     /* NULL and empty are refused throughout. */
-    ok(L"NULL metrics refused", !placeholder_icon_rect(NULL, &big, &ir));
-    ok(L"NULL box refused", !placeholder_icon_rect(&m, NULL, &ir));
-    ok(L"NULL output refused", !placeholder_icon_rect(&m, &big, NULL));
+    ok(L"NULL metrics refused", !placeholder_icon_rect(NULL, &big, 0, &ir));
+    ok(L"NULL box refused", !placeholder_icon_rect(&m, NULL, 0, &ir));
+    ok(L"NULL output refused", !placeholder_icon_rect(&m, &big, 0, NULL));
     const RECT empty = r4(5, 5, 5, 5);
     ok(L"an empty box refused", !placeholder_is_visible(&empty));
-    ok(L"and has no name line", !placeholder_name_rect(&m, &empty, &nr));
+    ok(L"and has no name line", !placeholder_name_rect(&m, &empty, 0, &nr));
+
+    /*
+     * A box dragged to the very top: the toolbar owns the first pixels of the
+     * screen, so the label block (icon, name, size) slides down as one - the
+     * same floor the delete button takes. Without it the window's name is
+     * covered by the strip and cannot be read.
+     */
+    {
+        const RECT at_top = r4(0, 0, 1280, 800);
+        RECT ir2, nr2, sr2;
+
+        ok(L"a box at the very top still draws its icon",
+           placeholder_icon_rect(&m, &at_top, 96, &ir2));
+        ok_int(L"the icon is moved down to the floor", ir2.top, 96);
+        ok(L"and its name", placeholder_name_rect(&m, &at_top, 96, &nr2));
+        ok_int(L"the name moves with it", nr2.top, 96);
+        ok(L"and its readout", placeholder_size_rect(&m, &at_top, 96, &sr2));
+        ok_int(L"the readout keeps its distance below the icon",
+               sr2.top, ir2.bottom + 2);
+
+        /* The same box with no floor keeps its rows where they were. */
+        ok(L"no floor, the box draws normally",
+           placeholder_icon_rect(&m, &at_top, 0, &ir2));
+        ok_int(L"and nothing moves", ir2.top, 8);
+
+        /* A box too short to hold the block at the floor claims nothing. */
+        const RECT short_top = r4(0, 0, 200, 100);
+        ok(L"a short box at the floor refuses the icon",
+           !placeholder_icon_rect(&m, &short_top, 96, &ir2));
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -251,23 +281,23 @@ static void test_editing(void)
     };
     PlaceholderHit h;
 
-    h = placeholder_hit(boxes, 3, &m, p2(20, 20));
+    h = placeholder_hit(boxes, 3, &m, 0, p2(20, 20));
     ok_int(L"inside box 0 only", (int)h.kind, (int)PLACEHOLDER_HIT_BODY);
     ok_int(L"and it names that box", h.index, 0);
 
-    h = placeholder_hit(boxes, 3, &m, p2(75, 75));
+    h = placeholder_hit(boxes, 3, &m, 0, p2(75, 75));
     ok_int(L"where two overlap, the top one wins", h.index, 2);
 
-    h = placeholder_hit(boxes, 3, &m, p2(145, 145));
+    h = placeholder_hit(boxes, 3, &m, 0, p2(145, 145));
     ok_int(L"the grip is asked before the body", (int)h.kind, (int)PLACEHOLDER_HIT_GRIP);
     ok_int(L"and it belongs to that box", h.index, 2);
 
-    h = placeholder_hit(boxes, 3, &m, p2(900, 900));
+    h = placeholder_hit(boxes, 3, &m, 0, p2(900, 900));
     ok_int(L"empty canvas is nothing", (int)h.kind, (int)PLACEHOLDER_HIT_NONE);
     ok_int(L"with no index", h.index, -1);
 
     ok_int(L"no boxes at all is nothing",
-           (int)placeholder_hit(NULL, 0, &m, p2(0, 0)).kind,
+           (int)placeholder_hit(NULL, 0, &m, 0, p2(0, 0)).kind,
            (int)PLACEHOLDER_HIT_NONE);
 
     /* ---- moving ---- */

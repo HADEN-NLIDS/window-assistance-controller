@@ -7,6 +7,7 @@
  */
 
 #include "launch.h"
+#include "launch_score.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -185,33 +186,6 @@ typedef struct {
     int            only_new;   /* skip windows from the pre-launch snapshot */
 } WaitFilter;
 
-/*
- * Score a candidate main window. Bigger is better; a window that is neither
- * minimized nor maximized beats one that is, because an application that
- * restored its own state is still starting up.
- *
- * Returns 0 for anything that cannot be the main window.
- */
-static LONGLONG candidate_score(const WindowInfo *w)
-{
-    LONG cw, ch;
-    LONGLONG area;
-
-    if (!w->is_visible) return 0;
-    if (w->is_cloaked)  return 0;
-    if (w->ex_style & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return 0;
-
-    cw = w->rect.right - w->rect.left;
-    ch = w->rect.bottom - w->rect.top;
-
-    /* Below this it is a helper or a splash frame, not a main window. */
-    if (cw < 200 || ch < 150) return 0;
-
-    area = (LONGLONG)cw * (LONGLONG)ch;
-    if (w->is_iconic || w->is_zoomed) area /= 4;
-    return area;
-}
-
 static HWND best_matching(const WaitFilter *wf, RECT *out_rect, LONGLONG *out_score)
 {
     /*
@@ -250,7 +224,7 @@ static HWND best_matching(const WaitFilter *wf, RECT *out_rect, LONGLONG *out_sc
             if (_wcsicmp(win_file_name(path), wf->exe_name) != 0) continue;
         }
 
-        s = candidate_score(w);
+        s = launch_score_candidate(w);
         if (s > best_score) {
             best_score = s;
             best = w->hwnd;

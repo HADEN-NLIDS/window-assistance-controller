@@ -106,12 +106,14 @@ extern "C" {
                             "What you can do: plug that monitor back in, or use " \
                             "[Unbind monitor] so the window is placed wherever it opens.") \
     X(SIDEBAR_COUNT_FMT,    "%d applications")                              \
+    X(SIDEBAR_PATHLESS_FMT, "%ls %d program(s) with no launch path")        \
     X(EDIT_OVERLAY_TITLE,   "Edit mode  -  monitor %d   %dx%d")             \
     X(EDIT_OVERLAY_RECT_FMT,"overlay %d,%d - %d,%d   (rcMonitor, taskbar included)") \
     X(PLACEHOLDER_SIZE_FMT, "%d x %d")                                      \
     X(PLACEHOLDER_LAST_FMT, "%d x %d   (last placed: %d x %d)")             \
     X(PLACEHOLDER_MORE_FMT, "%d more preset(s) do not fit on this screen")  \
     X(MSG_EDIT_APPLIED_FMT, "%d preset(s) updated from the canvas")         \
+    X(MSG_EDIT_REMOVED_FMT, "Removed %ls from this workspace")              \
     X(MSG_EDIT_PICKED_FMT,  "%d preset(s) picked up from the screen")       \
 
 /* The enum and both tables expand this: templates first, then finished text. */
@@ -290,6 +292,7 @@ extern "C" {
     X(SETTINGS_PERM_NOTE_NORMAL, "Windows blocks a standard program from moving the windows of an elevated one - accelerators and driver tools are usually elevated. To control those: close this program and start it again with \"Run as administrator\". Do that only when you need it.") \
     X(SETTINGS_HOOK_LABEL,  "Put windows back as they appear (stay in the background)") \
     X(SETTINGS_HOOK_NOTE,   "Watches for windows as they open and puts the ones a preset matches back in place - including programs you start yourself. Windows tells it when a window appears, so it never polls or scans. The program has to be running for this; it can sit in the tray.") \
+    X(SETTINGS_TASKBAR,     "Show a taskbar guide line in edit mode (presets snap to it when dragged)") \
     X(SETTINGS_GUIDE,       "User guide")                                   \
                                                                             \
     /* ---- the edit toolbar (stage 6) --------------------------- */        \
@@ -299,6 +302,8 @@ extern "C" {
     X(TB_LAYOUT,      "Layout format")                                      \
     X(TB_TPL_HALVES,  "Halves")                                             \
     X(TB_TPL_THIRDS,  "Thirds")                                             \
+    X(TB_TPL_1P2,     "1+2")                                                \
+    X(TB_TPL_2P1,     "2+1")                                                \
     X(TB_TPL_2X2,     "2x2")                                                \
     X(TB_TPL_3X3,     "3x3")                                                \
     X(TB_CUSTOM,      "Custom")                                             \
@@ -334,6 +339,7 @@ extern "C" {
     /* ---- edit mode (stage 6) --------------------------------- */        \
     X(MSG_EDIT_ENTERED,     "Edit mode. Leave with Esc, the toolbar's exit button, or the exit hotkey.") \
     X(MSG_EDIT_ENTER_FAILED,"Could not start edit mode.")                   \
+    X(MSG_EDIT_WATCHDOG,    "Edit mode stopped responding; the watchdog closed it.") \
     X(EDIT_EXIT_HOTKEY,     "the exit hotkey")                              \
     X(EDIT_EXIT_ESCAPE,     "Esc")                                          \
     X(EDIT_EXIT_TOOLBAR,    "the toolbar's exit button")                    \

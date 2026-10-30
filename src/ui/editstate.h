@@ -152,6 +152,14 @@ void edit_set_sidebar(const OverlaySidebarSource *src, OverlayDropFn on_drop,
 void edit_set_slots(const OverlaySlotSource *src);
 
 /*
+ * Turn the taskbar guide line on or off for the running session.
+ *
+ * Does nothing when no session is running: the overlay is created with the
+ * guide on, and this only reflects the settings switch.
+ */
+void edit_set_taskbar_guide(BOOL on);
+
+/*
  * END THE SESSION. The only place edit-mode resources are released.
  *
  * Safe to call when nothing is running, and safe to call twice. Stage 8 adds

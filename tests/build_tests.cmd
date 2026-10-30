@@ -79,8 +79,10 @@ for %%t in (!TARGETS!) do (
         if /i "%%t"=="t19_proclaunch"    set "EXTRASRC="%WAC_ROOT%\src\core\proc_launch.c""
         if /i "%%t"=="t23_runstate"      set "EXTRASRC="%WAC_ROOT%\src\model\runstate.c" "%WAC_ROOT%\src\model\config.c" "%WAC_ROOT%\src\util\strutil.c""
         if /i "%%t"=="t24_appconfig"   set "EXTRASRC="%WAC_ROOT%\src\appconfig.c" "%WAC_ROOT%\src\model\store.c" "%WAC_ROOT%\src\model\workspace.c" "%WAC_ROOT%\src\core\monitor.c" "%WAC_ROOT%\src\ui\page_settings.c" "%WAC_ROOT%\src\ui\i18n.c" "%WAC_ROOT%\src\util\strutil.c""
-        if /i "%%t"=="t22_workspacerun"  set "EXTRASRC="%WAC_ROOT%\src\model\workspace_run.c" "%WAC_ROOT%\src\model\workspace.c" "%WAC_ROOT%\src\model\rule.c" "%WAC_ROOT%\src\model\store.c" "%WAC_ROOT%\src\model\config.c" "%WAC_ROOT%\src\core\proc_launch.c" "%WAC_ROOT%\src\core\launch.c" "%WAC_ROOT%\src\core\win_place.c" "%WAC_ROOT%\src\core\win_enum.c" "%WAC_ROOT%\src\core\app_id.c" "%WAC_ROOT%\src\core\monitor.c" "%WAC_ROOT%\src\core\relcoord.c" "%WAC_ROOT%\src\util\strutil.c""
+        if /i "%%t"=="t22_workspacerun"  set "EXTRASRC="%WAC_ROOT%\src\model\workspace_run.c" "%WAC_ROOT%\src\model\workspace.c" "%WAC_ROOT%\src\model\rule.c" "%WAC_ROOT%\src\model\store.c" "%WAC_ROOT%\src\model\config.c" "%WAC_ROOT%\src\core\proc_launch.c" "%WAC_ROOT%\src\core\launch.c" "%WAC_ROOT%\src\core\launch_score.c" "%WAC_ROOT%\src\core\win_place.c" "%WAC_ROOT%\src\core\win_enum.c" "%WAC_ROOT%\src\core\app_id.c" "%WAC_ROOT%\src\core\monitor.c" "%WAC_ROOT%\src\core\relcoord.c" "%WAC_ROOT%\src\util\strutil.c""
         if /i "%%t"=="t30_place" set "EXTRASRC="%WAC_ROOT%\src\core\win_enum.c" "%WAC_ROOT%\src\core\win_place.c" "%WAC_ROOT%\src\core\app_id.c" "%WAC_ROOT%\src\core\monitor.c" "%WAC_ROOT%\src\core\relcoord.c" "%WAC_ROOT%\src\model\store.c" "%WAC_ROOT%\src\model\rule.c" "%WAC_ROOT%\src\model\config.c" "%WAC_ROOT%\src\util\strutil.c""
+        if /i "%%t"=="t31_splash" set "EXTRASRC="%WAC_ROOT%\src\core\launch_score.c""
+        if /i "%%t"=="t32_watchdog" set "EXTRASRC="%WAC_ROOT%\src\core\watchdog.c" "%WAC_ROOT%\src\util\log.c" "%WAC_ROOT%\src\model\config.c" "%WAC_ROOT%\src\util\strutil.c""
         if /i "%%t"=="t20_monitor_enum"  set "EXTRASRC="%WAC_ROOT%\src\core\monitor.c""
         if /i "%%t"=="t50_overlay"       set "EXTRASRC="%WAC_ROOT%\src\ui\overlay.c" "%WAC_ROOT%\src\ui\popup.c" "%WAC_ROOT%\src\ui\sidebar.c" "%WAC_ROOT%\src\ui\iconcache.c" "%WAC_ROOT%\src\ui\placeholder.c" "%WAC_ROOT%\src\ui\snapgrid.c" "%WAC_ROOT%\src\ui\toolbar.c" "%WAC_ROOT%\src\ui\i18n.c" "%WAC_ROOT%\src\core\monitor.c" "%WAC_ROOT%\src\util\log.c" "%WAC_ROOT%\src\model\config.c" "%WAC_ROOT%\src\util\strutil.c""
         if /i "%%t"=="t21_monitor_match" set "EXTRASRC="%WAC_ROOT%\src\core\monitor.c""
@@ -92,6 +94,7 @@ for %%t in (!TARGETS!) do (
         if /i "%%t"=="t72_placeholder"   set "EXTRASRC="%WAC_ROOT%\src\ui\placeholder.c""
         if /i "%%t"=="t73_pickup" set "EXTRASRC="%WAC_ROOT%\src\model\pickup.c" "%WAC_ROOT%\src\core\win_enum.c" "%WAC_ROOT%\src\core\app_id.c" "%WAC_ROOT%\src\core\monitor.c" "%WAC_ROOT%\src\core\relcoord.c" "%WAC_ROOT%\src\model\rule.c" "%WAC_ROOT%\src\model\store.c" "%WAC_ROOT%\src\model\config.c" "%WAC_ROOT%\src\util\log.c" "%WAC_ROOT%\src\util\strutil.c""
         if /i "%%t"=="t60_displaychange" set "EXTRASRC="%WAC_ROOT%\src\core\displaywatch.c" "%WAC_ROOT%\src\core\monitor.c""
+        if /i "%%t"=="t74_layout" set "EXTRASRC="%WAC_ROOT%\src\ui\snapgrid.c""
 
         cl %CFLAGS% /I"%WAC_ROOT%\src" /I"%WAC_ROOT%\src\core" /I"%WAC_ROOT%\src\model" "%WAC_ROOT%\tests\%%t.c" !EXTRASRC! /Fo"%OUTDIR%\\" /Fe"%OUTDIR%\%%t.exe" /link %LDFLAGS% !SUB! !MANIFEST! %LIBS% >nul 2>nul
         if errorlevel 1 (
